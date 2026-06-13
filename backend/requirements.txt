@@ -1,0 +1,2 @@
+# AEIS-K local backend currently uses only the Python standard library.
+# Add live provider SDKs here later, for example Sentinel Hub or Google Earth Engine.

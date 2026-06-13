@@ -1,0 +1,567 @@
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+import 'leaflet-draw/dist/leaflet.draw.css';
+import 'leaflet-draw';
+import * as turf from '@turf/turf';
+
+// Fix Leaflet default icons
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+// County colors
+const countyColors = [
+  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8',
+  '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8C471', '#A9DFBF', '#F1948A', '#AED6F1',
+  '#F9E79F', '#FFB347', '#87CEEB', '#D291BC', '#77DD77', '#FF6961', '#6B5B95',
+  '#88B04B', '#FF6F61', '#92A8D1', '#955251', '#B565A7', '#009B77', '#DD4124'
+];
+
+// Zoom component
+function ZoomToFeature({ feature, map }) {
+  useEffect(() => {
+    if (feature && map) {
+      const layer = L.geoJSON(feature);
+      const bounds = layer.getBounds();
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+  }, [feature, map]);
+  return null;
+}
+
+// Map bounds component
+function SetBounds({ data, map }) {
+  useEffect(() => {
+    if (data && data.features && data.features.length > 0 && map) {
+      const layer = L.geoJSON(data);
+      const bounds = layer.getBounds();
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+  }, [data, map]);
+  return null;
+}
+
+function App() {
+  // Data state
+  const [counties, setCounties] = useState(null);
+  const [subcounties, setSubcounties] = useState(null);
+  const [wards, setWards] = useState(null);
+  
+  // Selection state
+  const [selectedCounty, setSelectedCounty] = useState(null);
+  const [selectedSubcounty, setSelectedSubcounty] = useState(null);
+  const [selectedWard, setSelectedWard] = useState(null);
+  
+  // Linked data (using spatial intersection)
+  const [linkedSubcounties, setLinkedSubcounties] = useState({});
+  const [linkedWards, setLinkedWards] = useState({});
+  
+  // Navigation history
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  
+  // Map reference
+  const [map, setMap] = useState(null);
+  
+  // Base map
+  const [baseMap, setBaseMap] = useState('street');
+  
+  // Drawing
+  const [drawMode, setDrawMode] = useState(false);
+  const [farms, setFarms] = useState([]);
+  const drawControlRef = useRef(null);
+  
+  // UI state
+  const [loading, setLoading] = useState(true);
+  const [debugMsg, setDebugMsg] = useState('');
+  
+  // Chat state
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+
+  // Base maps
+  const baseMaps = {
+    street: { name: '🏙️ Street', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OSM' },
+    satellite: { name: '🛰️ Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '© Esri' },
+    hybrid: { name: '🗺️ Hybrid', url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attribution: '© Google' },
+    terrain: { name: '⛰️ Terrain', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attribution: '© OpenTopoMap' },
+    dark: { name: '🌙 Dark', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', attribution: '© CartoDB' }
+  };
+
+  // Load all data and build spatial relationships
+  useEffect(() => {
+    setLoading(true);
+    
+    Promise.all([
+      fetch('/data/counties.geojson').then(r => r.json()),
+      fetch('/data/sub_counties.geojson').then(r => r.json()),
+      fetch('/data/wards.geojson').then(r => r.json())
+    ]).then(([countiesData, subcountiesData, wardsData]) => {
+      
+      // Add colors to counties
+      const coloredCounties = {
+        ...countiesData,
+        features: countiesData.features.map((f, idx) => ({
+          ...f,
+          properties: { ...f.properties, color: countyColors[idx % countyColors.length], displayName: f.properties?.ADM1_EN || 'Unknown' }
+        }))
+      };
+      setCounties(coloredCounties);
+      
+      // Process subcounties
+      const processedSubcounties = {
+        ...subcountiesData,
+        features: subcountiesData.features.map(f => ({
+          ...f,
+          properties: { ...f.properties, displayName: f.properties?.ADM2_EN || 'Unknown' }
+        }))
+      };
+      setSubcounties(processedSubcounties);
+      
+      // Process wards
+      const processedWards = {
+        ...wardsData,
+        features: wardsData.features.map(f => ({
+          ...f,
+          properties: { ...f.properties, displayName: f.properties?.shapeName || 'Unknown' }
+        }))
+      };
+      setWards(processedWards);
+      
+      // Build spatial relationships (which subcounties are inside which county)
+      const subcountyToCounty = {};
+      const wardToSubcounty = {};
+      
+      console.log('Building spatial relationships...');
+      
+      // For each county, find subcounties that are inside it
+      countiesData.features.forEach(county => {
+        const countyGeoJSON = county;
+        const countyName = county.properties?.ADM1_EN;
+        subcountyToCounty[countyName] = [];
+        
+        subcountiesData.features.forEach(subcounty => {
+          try {
+            // Check if subcounty is inside county using turf
+            const isInside = turf.booleanContains(countyGeoJSON, subcounty);
+            if (isInside) {
+              subcountyToCounty[countyName].push(subcounty);
+            }
+          } catch(e) { console.log('Spatial check failed:', e); }
+        });
+        
+        console.log(`${countyName}: ${subcountyToCounty[countyName].length} subcounties`);
+      });
+      
+      // For each subcounty, find wards inside it
+      subcountiesData.features.forEach(subcounty => {
+        const subcountyName = subcounty.properties?.ADM2_EN;
+        const subcountyGeoJSON = subcounty;
+        wardToSubcounty[subcountyName] = [];
+        
+        wardsData.features.forEach(ward => {
+          try {
+            const isInside = turf.booleanContains(subcountyGeoJSON, ward);
+            if (isInside) {
+              wardToSubcounty[subcountyName].push(ward);
+            }
+          } catch(e) { console.log('Ward spatial check failed:', e); }
+        });
+        
+        console.log(`${subcountyName}: ${wardToSubcounty[subcountyName].length} wards`);
+      });
+      
+      setLinkedSubcounties(subcountyToCounty);
+      setLinkedWards(wardToSubcounty);
+      setLoading(false);
+      setDebugMsg(`Loaded: ${countiesData.features.length} counties, ${subcountiesData.features.length} subcounties, ${wardsData.features.length} wards`);
+      
+    }).catch(err => {
+      console.error('Error loading data:', err);
+      setDebugMsg('Error loading data: ' + err.message);
+      setLoading(false);
+    });
+  }, []);
+
+  // Add to history and zoom when selection changes
+  const addToHistory = useCallback((type, item) => {
+    const newEntry = { type, item, timestamp: Date.now() };
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(newEntry);
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  }, [history, historyIndex]);
+
+  const goBack = useCallback(() => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      const prev = history[newIndex];
+      setHistoryIndex(newIndex);
+      
+      if (prev.type === 'county') setSelectedCounty(prev.item);
+      if (prev.type === 'subcounty') setSelectedSubcounty(prev.item);
+      if (prev.type === 'ward') setSelectedWard(prev.item);
+      
+      // Zoom to previous
+      if (map && prev.item) {
+        const layer = L.geoJSON(prev.item);
+        const bounds = layer.getBounds();
+        if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+  }, [history, historyIndex, map]);
+
+  const goForward = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      const next = history[newIndex];
+      setHistoryIndex(newIndex);
+      
+      if (next.type === 'county') setSelectedCounty(next.item);
+      if (next.type === 'subcounty') setSelectedSubcounty(next.item);
+      if (next.type === 'ward') setSelectedWard(next.item);
+      
+      if (map && next.item) {
+        const layer = L.geoJSON(next.item);
+        const bounds = layer.getBounds();
+        if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+  }, [history, historyIndex, map]);
+
+  const resetSelection = useCallback(() => {
+    setSelectedCounty(null);
+    setSelectedSubcounty(null);
+    setSelectedWard(null);
+    setHistory([]);
+    setHistoryIndex(-1);
+    if (map) {
+      map.setView([0.0236, 37.9062], 6);
+    }
+  }, [map]);
+
+  // Handle county selection
+  const handleCountySelect = (county) => {
+    setSelectedCounty(county);
+    setSelectedSubcounty(null);
+    setSelectedWard(null);
+    addToHistory('county', county);
+    
+    if (map) {
+      const layer = L.geoJSON(county);
+      const bounds = layer.getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  };
+
+  // Handle subcounty selection
+  const handleSubcountySelect = (subcounty) => {
+    setSelectedSubcounty(subcounty);
+    setSelectedWard(null);
+    addToHistory('subcounty', subcounty);
+    
+    if (map) {
+      const layer = L.geoJSON(subcounty);
+      const bounds = layer.getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  };
+
+  // Handle ward selection
+  const handleWardSelect = (ward) => {
+    setSelectedWard(ward);
+    addToHistory('ward', ward);
+    
+    if (map) {
+      const layer = L.geoJSON(ward);
+      const bounds = layer.getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  };
+
+  // Style for boundaries
+  const getBoundaryStyle = (feature) => {
+    const isSelected = (selectedCounty && feature === selectedCounty) ||
+                       (selectedSubcounty && feature === selectedSubcounty) ||
+                       (selectedWard && feature === selectedWard);
+    return {
+      weight: isSelected ? 4 : 1.5,
+      opacity: 0.8,
+      color: feature.properties?.color || '#3388ff',
+      fillOpacity: isSelected ? 0.15 : 0,
+      fillColor: feature.properties?.color || '#3388ff'
+    };
+  };
+
+  // Feature interactions
+  const onEachFeature = (feature, layer, level) => {
+    const name = feature.properties?.displayName || 'Unknown';
+    
+    layer.bindPopup(`<div style="padding:5px"><strong>${name}</strong><br/><span style="font-size:10px">${level}</span></div>`);
+    
+    layer.on({
+      mouseover: () => layer.setStyle({ weight: 4, color: '#ff0000' }),
+      mouseout: () => layer.setStyle(getBoundaryStyle(feature)),
+      click: () => {
+        if (level === 'county') handleCountySelect(feature);
+        if (level === 'subcounty') handleSubcountySelect(feature);
+        if (level === 'ward') handleWardSelect(feature);
+      }
+    });
+  };
+
+  // Setup drawing control
+  const setupDrawControl = useCallback((mapInstance) => {
+    if (drawControlRef.current) {
+      mapInstance.removeControl(drawControlRef.current);
+    }
+    
+    if (!drawMode) return;
+    
+    const drawControl = new L.Control.Draw({
+      position: 'topleft',
+      edit: { featureGroup: new L.FeatureGroup(), remove: true },
+      draw: {
+        polygon: {
+          shapeOptions: { color: '#ff7800', weight: 3, fillColor: '#ff7800', fillOpacity: 0.3 },
+          showArea: true
+        },
+        rectangle: { shapeOptions: { color: '#ff7800', weight: 3, fillColor: '#ff7800', fillOpacity: 0.3 } },
+        circle: false, marker: false, polyline: false, circlemarker: false
+      }
+    });
+    
+    mapInstance.addControl(drawControl);
+    drawControlRef.current = drawControl;
+    
+    mapInstance.on(L.Draw.Event.CREATED, (e) => {
+      const layer = e.layer;
+      const geojson = layer.toGeoJSON();
+      let area = 0;
+      try {
+        area = (turf.area(geojson) / 10000).toFixed(2);
+      } catch(err) { area = 'Unknown'; }
+      
+      const farmName = prompt('Enter farm name:', `Farm ${farms.length + 1}`);
+      const newFarm = {
+        id: Date.now(),
+        name: farmName || `Farm ${farms.length + 1}`,
+        geometry: geojson,
+        area: area + ' ha',
+        date: new Date().toLocaleDateString()
+      };
+      
+      setFarms(prev => [...prev, newFarm]);
+      
+      L.geoJSON(geojson, {
+        style: { color: '#22c55e', weight: 3, fillColor: '#22c55e', fillOpacity: 0.3 },
+        onEachFeature: (f, l) => {
+          l.bindPopup(`<strong>${newFarm.name}</strong><br/>Area: ${newFarm.area}<br/>Created: ${newFarm.date}`);
+        }
+      }).addTo(mapInstance);
+    });
+  }, [drawMode, farms.length]);
+
+  // Chat handler
+  const sendChatMessage = () => {
+    if (!chatInput.trim()) return;
+    
+    setChatMessages(prev => [...prev, { text: chatInput, sender: 'user', time: new Date().toLocaleTimeString() }]);
+    
+    setTimeout(() => {
+      let response = '';
+      const q = chatInput.toLowerCase();
+      
+      if (q.includes('county')) response = `Kenya has 47 counties. ${selectedCounty ? `Selected: ${selectedCounty.properties?.displayName}` : 'Select a county from the map or dropdown.'}`;
+      else if (q.includes('subcounty')) response = `There are 293 sub-counties. ${selectedSubcounty ? `Selected: ${selectedSubcounty.properties?.displayName}` : 'Select a county first to see its sub-counties.'}`;
+      else if (q.includes('ward')) response = `There are 1,452 wards. ${selectedWard ? `Selected a ward.` : 'Select a sub-county first.'}`;
+      else if (q.includes('farm')) response = `You have ${farms.length} farm(s). Enable Draw Farm Mode and draw polygons on the map.`;
+      else response = `Ask about Kenya's 47 counties, 293 sub-counties, 1,452 wards, or farm drawing.`;
+      
+      setChatMessages(prev => [...prev, { text: response, sender: 'ai', time: new Date().toLocaleTimeString() }]);
+    }, 300);
+    
+    setChatInput('');
+  };
+
+  // Get current data to display
+  const getCurrentData = () => {
+    if (selectedWard) return { data: { ...wards, features: [selectedWard] }, level: 'ward' };
+    if (selectedSubcounty) return { data: { ...subcounties, features: [selectedSubcounty] }, level: 'subcounty' };
+    if (selectedCounty) return { data: { ...counties, features: [selectedCounty] }, level: 'county' };
+    return { data: counties, level: 'county' };
+  };
+
+  const { data: currentData, level: currentLevel } = getCurrentData();
+  
+  // Get subcounties for selected county
+  const getSubcountiesForCounty = () => {
+    if (!selectedCounty || !linkedSubcounties) return [];
+    const countyName = selectedCounty.properties?.ADM1_EN;
+    return linkedSubcounties[countyName] || [];
+  };
+  
+  // Get wards for selected subcounty
+  const getWardsForSubcounty = () => {
+    if (!selectedSubcounty || !linkedWards) return [];
+    const subcountyName = selectedSubcounty.properties?.ADM2_EN;
+    return linkedWards[subcountyName] || [];
+  };
+
+  return (
+    <div style={{ height: '100vh', width: '100%', position: 'relative' }}>
+      {/* Control Panel */}
+      <div style={{
+        position: 'absolute', top: 20, right: 20, zIndex: 1000,
+        background: 'white', padding: '15px', borderRadius: '12px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: '320px',
+        maxHeight: '85vh', overflowY: 'auto', fontFamily: 'system-ui'
+      }}>
+        <h3 style={{ margin: '0 0 10px 0' }}>🗺️ Kenya GIS</h3>
+        
+        {loading && <div style={{ color: '#2563eb' }}>Loading data...</div>}
+        {debugMsg && <div style={{ fontSize: '11px', color: '#059669', marginBottom: '10px' }}>{debugMsg}</div>}
+        
+        {/* Base Map */}
+        <div style={{ marginBottom: '15px' }}>
+          <label style={{ fontWeight: 'bold', fontSize: '12px' }}>Base Map:</label>
+          <select value={baseMap} onChange={(e) => setBaseMap(e.target.value)} style={{ width: '100%', padding: '6px', marginTop: '5px', borderRadius: '6px' }}>
+            {Object.entries(baseMaps).map(([key, val]) => (<option key={key} value={key}>{val.name}</option>))}
+          </select>
+        </div>
+
+        <hr />
+
+        {/* Navigation Buttons */}
+        <div style={{ display: 'flex', gap: '10px', margin: '10px 0' }}>
+          <button onClick={goBack} disabled={historyIndex <= 0} style={{ flex: 1, padding: '8px', background: historyIndex > 0 ? '#2563eb' : '#ccc', color: 'white', border: 'none', borderRadius: '6px', cursor: historyIndex > 0 ? 'pointer' : 'default' }}>◀ Back</button>
+          <button onClick={goForward} disabled={historyIndex >= history.length - 1} style={{ flex: 1, padding: '8px', background: historyIndex < history.length - 1 ? '#2563eb' : '#ccc', color: 'white', border: 'none', borderRadius: '6px', cursor: historyIndex < history.length - 1 ? 'pointer' : 'default' }}>Forward ▶</button>
+          <button onClick={resetSelection} style={{ flex: 1, padding: '8px', background: '#6b7280', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Reset</button>
+        </div>
+
+        <hr />
+
+        {/* County Dropdown */}
+        <div style={{ marginBottom: '15px' }}>
+          <label style={{ fontWeight: 'bold', fontSize: '12px' }}>1. Select County:</label>
+          <select value={selectedCounty?.properties?.displayName || ''} onChange={(e) => {
+            const selected = counties?.features.find(f => f.properties?.displayName === e.target.value);
+            if (selected) handleCountySelect(selected);
+          }} style={{ width: '100%', padding: '6px', marginTop: '5px', borderRadius: '6px' }}>
+            <option value="">-- Select County --</option>
+            {counties?.features.map((f, i) => (<option key={i} value={f.properties?.displayName}>{f.properties?.displayName}</option>))}
+          </select>
+        </div>
+
+        {/* Sub-county Dropdown */}
+        {selectedCounty && (
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', fontSize: '12px' }}>2. Select Sub-County ({getSubcountiesForCounty().length}):</label>
+            <select value={selectedSubcounty?.properties?.displayName || ''} onChange={(e) => {
+              const selected = getSubcountiesForCounty().find(f => f.properties?.displayName === e.target.value);
+              if (selected) handleSubcountySelect(selected);
+            }} style={{ width: '100%', padding: '6px', marginTop: '5px', borderRadius: '6px' }}>
+              <option value="">-- Select Sub-County --</option>
+              {getSubcountiesForCounty().map((f, i) => (<option key={i} value={f.properties?.displayName}>{f.properties?.displayName}</option>))}
+            </select>
+          </div>
+        )}
+
+        {/* Ward Dropdown */}
+        {selectedSubcounty && (
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', fontSize: '12px' }}>3. Select Ward ({getWardsForSubcounty().length}):</label>
+            <select value={selectedWard?.properties?.displayName || ''} onChange={(e) => {
+              const selected = getWardsForSubcounty().find(f => f.properties?.displayName === e.target.value);
+              if (selected) handleWardSelect(selected);
+            }} style={{ width: '100%', padding: '6px', marginTop: '5px', borderRadius: '6px' }}>
+              <option value="">-- Select Ward --</option>
+              {getWardsForSubcounty().map((f, i) => (<option key={i} value={f.properties?.displayName}>{f.properties?.displayName}</option>))}
+            </select>
+          </div>
+        )}
+
+        <hr />
+
+        {/* Draw Farm */}
+        <div style={{ marginBottom: '15px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <input type="checkbox" checked={drawMode} onChange={(e) => setDrawMode(e.target.checked)} />
+            <span>✏️ Draw Farm Mode</span>
+          </label>
+          {drawMode && <div style={{ fontSize: '11px', color: '#666', marginTop: '5px', padding: '5px', background: '#f0f0f0', borderRadius: '4px' }}>💡 Click the polygon tool on the left, then draw on the map</div>}
+        </div>
+
+        {/* Saved Farms */}
+        {farms.length > 0 && (
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontWeight: 'bold', fontSize: '12px' }}>📋 Farms ({farms.length})</label>
+            <div style={{ maxHeight: '100px', overflowY: 'auto', marginTop: '5px', fontSize: '11px', border: '1px solid #eee', borderRadius: '4px' }}>
+              {farms.map(farm => (
+                <div key={farm.id} style={{ padding: '6px', borderBottom: '1px solid #eee' }}>
+                  <strong>{farm.name}</strong><br/>
+                  Area: {farm.area}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <hr />
+
+        {/* Chat Button */}
+        <button onClick={() => setShowChat(!showChat)} style={{ width: '100%', padding: '8px', background: showChat ? '#dc2626' : '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+          {showChat ? 'Close Chat' : '💬 AI Assistant'}
+        </button>
+      </div>
+
+      {/* Chat Window */}
+      {showChat && (
+        <div style={{ position: 'absolute', bottom: 20, right: 20, zIndex: 1000, width: '350px', height: '400px', background: 'white', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '12px', background: '#2563eb', color: 'white', fontWeight: 'bold' }}>🤖 GIS Assistant</div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {chatMessages.length === 0 && <div style={{ textAlign: 'center', color: '#999', marginTop: '20px' }}>Ask about counties, sub-counties, wards, or farms!</div>}
+            {chatMessages.map((msg, idx) => (
+              <div key={idx} style={{ alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start', background: msg.sender === 'user' ? '#2563eb' : '#e5e7eb', color: msg.sender === 'user' ? 'white' : 'black', padding: '8px 12px', borderRadius: '12px', maxWidth: '80%', fontSize: '13px' }}>
+                <div>{msg.text}</div>
+                <div style={{ fontSize: '9px', opacity: 0.7 }}>{msg.time}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: '10px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '8px' }}>
+            <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()} placeholder="Ask something..." style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }} />
+            <button onClick={sendChatMessage} style={{ padding: '8px 12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Send</button>
+          </div>
+        </div>
+      )}
+
+      {/* Map */}
+      <MapContainer center={[0.0236, 37.9062]} zoom={6} style={{ height: '100%', width: '100%' }} whenCreated={(m) => { setMap(m); setupDrawControl(m); }}>
+        <TileLayer attribution={baseMaps[baseMap].attribution} url={baseMaps[baseMap].url} />
+        
+        {/* Current data layer */}
+        {currentData && (
+          <GeoJSON data={currentData} style={getBoundaryStyle} onEachFeature={(f, l) => onEachFeature(f, l, currentLevel)} />
+        )}
+        
+        {/* Farms */}
+        {farms.map(farm => (<GeoJSON key={farm.id} data={farm.geometry} style={{ color: '#22c55e', weight: 3, fillColor: '#22c55e', fillOpacity: 0.3 }} />))}
+        
+        {/* Zoom to current selection */}
+        {currentData && map && <SetBounds data={currentData} map={map} />}
+      </MapContainer>
+    </div>
+  );
+}
+
+export default App;
