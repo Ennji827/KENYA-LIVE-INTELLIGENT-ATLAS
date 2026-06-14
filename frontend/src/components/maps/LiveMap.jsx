@@ -9,12 +9,11 @@ import LayerManager from "../Ui/LayerManager"; // Assuming this is correct
 import InfoPanel from "../Ui/InfoPanel";
 
 import CountyLayer from "./CountyLayer";
+import CountyCodeLabels from "./CountyCodeLabels";
 import SubCountyLayer from "./SubCountyLayer";
 import WardLayer from "./WardLayer";
-import NDVIHeatmapLayer from "./NDVIHeatmapLayer";
-import NDWIHeatmapLayer from "./NDWIHeatmapLayer";
-import NDBIHeatmapLayer from "./NDBIHeatmapLayer";
 import SegmentationLayer from "./SegmentationLayer";
+import { getApiBase } from "../../utils/api";
 
 const COLORS = {
   farm: { color: '#22c55e', weight: 3, fillOpacity: 0.3 }
@@ -24,6 +23,33 @@ const baseMaps = {
   street: { name: 'Street', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png' },
   satellite: { name: 'Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' },
   hybrid: { name: 'Hybrid', url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' }
+};
+
+const realImageryLayers = {
+  nasaTrueColor: {
+    label: "NASA MODIS true color",
+    date: "2026-06-14",
+    opacity: 0.82,
+    maxNativeZoom: 9,
+    url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/2026-06-14/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpeg",
+    attribution: "NASA GIBS",
+  },
+  nasaNdvi: {
+    label: "NASA MODIS NDVI 8-day",
+    date: "2026-06-13",
+    opacity: 0.72,
+    maxNativeZoom: 9,
+    url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_NDVI_8Day/default/2026-06-13/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png",
+    attribution: "NASA GIBS",
+  },
+  nasaLst: {
+    label: "NASA MODIS LST day",
+    date: "2026-06-14",
+    opacity: 0.68,
+    maxNativeZoom: 7,
+    url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Land_Surface_Temp_Day/default/2026-06-14/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png",
+    attribution: "NASA GIBS",
+  },
 };
 
 function MapBinder({ onReady }) {
@@ -79,11 +105,13 @@ export default function LiveMap({
   dashboardMode = false,
   accessCountyName = "",
   segmentClass = "buildings",
-  segmentThreshold = 0.72,
   onSegmentationStats,
+  mapHeight = "100vh",
+  hoverSelectEnabled = true,
 }) {
   const [map, setMap] = useState(null);
   const [currentZoom, setCurrentZoom] = useState(6);
+  const [geeConfig, setGeeConfig] = useState(null);
   const farmLayersRef = useRef({});
   const fetchAreaAnalysis = useAEISStore((s) => s.fetchAreaAnalysis);
 
@@ -110,6 +138,40 @@ export default function LiveMap({
 
   const layers = useAEISStore((s) => s.layers);
   const hoverAutoSelectRef = useRef(false);
+  const geeLayerKeys = ["geeNdvi", "geeNdwi", "geeLst"];
+  const activeGeeLayers = geeLayerKeys
+    .filter((key) => layers[key])
+    .map((key) => geeConfig?.layers?.[key])
+    .filter(Boolean);
+  const activeConfiguredGeeLayers = activeGeeLayers.filter((layer) => layer.configured && layer.tile_url);
+  const activeMissingGeeLayers = activeGeeLayers.filter((layer) => !layer.configured || !layer.tile_url);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadGeeConfig() {
+      try {
+        const response = await fetch(`${getApiBase()}/api/gee/layers`);
+        if (!response.ok) throw new Error("GEE layer endpoint unavailable");
+        const payload = await response.json();
+        if (!cancelled) setGeeConfig(payload);
+      } catch (error) {
+        if (!cancelled) {
+          setGeeConfig({
+            status: "unavailable",
+            layers: {
+              geeNdvi: { key: "geeNdvi", label: "GEE Sentinel-2 NDVI", configured: false, note: "Backend GEE endpoint is unavailable." },
+              geeNdwi: { key: "geeNdwi", label: "GEE Sentinel-2 NDWI", configured: false, note: "Backend GEE endpoint is unavailable." },
+              geeLst: { key: "geeLst", label: "GEE Landsat LST", configured: false, note: "Backend GEE endpoint is unavailable." },
+            },
+          });
+        }
+      }
+    }
+    loadGeeConfig();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const visibleCounties = React.useMemo(() => {
     if (!counties || !accessCountyName) return counties;
@@ -235,7 +297,27 @@ export default function LiveMap({
     };
   }, [accessibleWards, selectedSubCounty, linkedWards]);
 
-  const intelligenceBoundary = selectedWard || selectedSubCounty || selectedCounty || visibleCounties;
+  const segmentationScope = React.useMemo(() => {
+    if (selectedWard) {
+      return {
+        level: "ward",
+        id: selectedWard.properties?.shapeID || selectedWard.properties?.ADM3_PCODE || selectedWard.properties?.shapeName,
+      };
+    }
+    if (selectedSubCounty) {
+      return {
+        level: "subcounty",
+        id: selectedSubCounty.properties?.ADM2_PCODE || selectedSubCounty.properties?.ADM2_EN,
+      };
+    }
+    if (selectedCounty) {
+      return {
+        level: "county",
+        id: selectedCounty.properties?.ADM1_PCODE || selectedCounty.properties?.ADM1_EN,
+      };
+    }
+    return { level: "", id: "" };
+  }, [selectedCounty, selectedSubCounty, selectedWard]);
 
   // Setup drawing
   useEffect(() => {
@@ -316,7 +398,7 @@ export default function LiveMap({
   }, [map]);
 
   return (
-    <div style={{ height: "100vh", position: "relative" }}>
+    <div style={{ height: mapHeight, position: "relative" }}>
       {!dashboardMode && (
         <>
           <TopBar />
@@ -340,6 +422,66 @@ export default function LiveMap({
         <NorthArrow />
 
         <TileLayer url={baseMaps[baseMap].url} />
+        {layers.nasaTrueColor && (
+          <TileLayer
+            url={realImageryLayers.nasaTrueColor.url}
+            opacity={realImageryLayers.nasaTrueColor.opacity}
+            maxNativeZoom={realImageryLayers.nasaTrueColor.maxNativeZoom}
+            attribution={realImageryLayers.nasaTrueColor.attribution}
+          />
+        )}
+        {layers.nasaNdvi && (
+          <TileLayer
+            url={realImageryLayers.nasaNdvi.url}
+            opacity={realImageryLayers.nasaNdvi.opacity}
+            maxNativeZoom={realImageryLayers.nasaNdvi.maxNativeZoom}
+            attribution={realImageryLayers.nasaNdvi.attribution}
+          />
+        )}
+        {layers.nasaLst && (
+          <TileLayer
+            url={realImageryLayers.nasaLst.url}
+            opacity={realImageryLayers.nasaLst.opacity}
+            maxNativeZoom={realImageryLayers.nasaLst.maxNativeZoom}
+            attribution={realImageryLayers.nasaLst.attribution}
+          />
+        )}
+        {activeConfiguredGeeLayers.map((layer) => (
+          <TileLayer
+            key={layer.key}
+            url={layer.tile_url}
+            opacity={layer.opacity ?? 0.72}
+            attribution="Google Earth Engine"
+          />
+        ))}
+        {(layers.nasaTrueColor || layers.nasaNdvi || layers.nasaLst || activeGeeLayers.length > 0) && (
+          <div className="aeis-map-source-badge leaflet-bottom leaflet-right">
+            <div className="leaflet-control">
+              {[realImageryLayers.nasaTrueColor, realImageryLayers.nasaNdvi, realImageryLayers.nasaLst]
+                .filter((item) =>
+                  (item === realImageryLayers.nasaTrueColor && layers.nasaTrueColor) ||
+                  (item === realImageryLayers.nasaNdvi && layers.nasaNdvi) ||
+                  (item === realImageryLayers.nasaLst && layers.nasaLst)
+                )
+                .map((item) => (
+                  <span key={item.label}>{item.label}: {item.date}</span>
+                ))}
+              {activeGeeLayers.map((item) => (
+                <span key={item.key}>
+                  {item.label}: {item.configured ? "Earth Engine tile" : `set ${item.env || "GEE env"}`}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {activeMissingGeeLayers.length > 0 && (
+          <div className="aeis-map-provider-warning leaflet-top leaflet-right">
+            <div className="leaflet-control">
+              <strong>GEE layer not connected</strong>
+              <span>Configure {activeMissingGeeLayers.map((layer) => layer.env || layer.key).join(", ")} in the backend environment.</span>
+            </div>
+          </div>
+        )}
 
         {visibleCounties && (layers?.counties ?? true) && (
           <CountyLayer
@@ -355,6 +497,7 @@ export default function LiveMap({
             }}
             onHover={(f) => {
               setHoveredCounty(f);
+              if (!hoverSelectEnabled) return;
               if (accessCountyName) return;
 
               hoverAutoSelectRef.current = true;
@@ -369,6 +512,9 @@ export default function LiveMap({
               }
             }}
           />
+        )}
+        {visibleCounties && (layers?.counties ?? true) && (
+          <CountyCodeLabels data={visibleCounties} visible />
         )}
 
         {visibleSubcounties && (layers?.subcounties) && (
@@ -403,14 +549,11 @@ export default function LiveMap({
           />
         )}
 
-        <NDVIHeatmapLayer visible={layers.ndvi} boundary={intelligenceBoundary} />
-        <NDWIHeatmapLayer visible={layers.ndwi} boundary={intelligenceBoundary} />
-        <NDBIHeatmapLayer visible={layers.ndbi} boundary={intelligenceBoundary} />
         <SegmentationLayer
           visible={layers.segmentation}
-          boundary={intelligenceBoundary}
+          scopeLevel={segmentationScope.level}
+          scopeId={segmentationScope.id}
           segmentClass={segmentClass}
-          threshold={segmentThreshold}
           onStats={onSegmentationStats}
         />
       </MapContainer>

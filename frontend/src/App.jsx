@@ -14,6 +14,21 @@ import { getApiBase } from './utils/api';
 
 // API base URL from environment variables
 const API_BASE = getApiBase();
+const COUNTY_SESSION_KEY = 'aeis_county_session';
+
+function readSavedCountySession() {
+  try {
+    const saved = localStorage.getItem(COUNTY_SESSION_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch (error) {
+    localStorage.removeItem(COUNTY_SESSION_KEY);
+    return null;
+  }
+}
+
+function countyUsernameForName(countyName) {
+  return `${countyName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}_county`;
+}
 
 function App() {
   // Get GeoJSON data and fetching state from global store
@@ -67,10 +82,12 @@ function App() {
   const [syncCount, setSyncCount] = useState(0);
   const [accessCountyName, setAccessCountyName] = useState('');
   const [segmentClass, setSegmentClass] = useState('buildings');
-  const [segmentThreshold, setSegmentThreshold] = useState(0.72);
   const [segmentationStats, setSegmentationStats] = useState({ count: 0 });
   const [feedPage, setFeedPage] = useState(0);
-  const [countySession, setCountySession] = useState(null);
+  const [countySession, setCountySession] = useState(readSavedCountySession);
+  const [countyAccounts, setCountyAccounts] = useState([]);
+  const [countyAuthModel, setCountyAuthModel] = useState(null);
+  const [countyAccountsError, setCountyAccountsError] = useState('');
   const [loginCountyName, setLoginCountyName] = useState('');
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -156,6 +173,88 @@ function App() {
   useEffect(() => {
     localStorage.setItem('aeis_farms', JSON.stringify(farms));
   }, [farms]);
+
+  useEffect(() => {
+    try {
+      if (countySession?.token) {
+        localStorage.setItem(COUNTY_SESSION_KEY, JSON.stringify(countySession));
+      } else {
+        localStorage.removeItem(COUNTY_SESSION_KEY);
+      }
+    } catch (error) {
+      console.warn('Unable to persist county session:', error);
+    }
+  }, [countySession]);
+
+  useEffect(() => {
+    if (!countySession?.token) return undefined;
+
+    let cancelled = false;
+
+    async function validateSavedCountySession() {
+      try {
+        const response = await fetch(`${API_BASE}/api/auth/validate-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: countySession.token }),
+        });
+        const data = await response.json();
+
+        if (cancelled) return;
+
+        if (!response.ok) {
+          setCountySession(null);
+          setAccessCountyName('');
+          setSelectedCounty(null);
+          setSelectedSubCounty(null);
+          setSelectedWard(null);
+          setLoginStatus(data.error || 'Saved county session expired. Sign in again.');
+          return;
+        }
+
+        setCountySession((current) => (
+          current?.token === data.token ? { ...current, ...data } : current
+        ));
+        setLoginStatus(`${data.county} county session active.`);
+      } catch (error) {
+        if (!cancelled) {
+          setLoginStatus('Unable to validate saved county session. Check the backend connection.');
+        }
+      }
+    }
+
+    validateSavedCountySession();
+    return () => {
+      cancelled = true;
+    };
+  }, [countySession?.token]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchCountyAccounts() {
+      try {
+        const response = await fetch(`${API_BASE}/api/auth/county-accounts`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Unable to load county accounts');
+
+        if (!cancelled) {
+          setCountyAccounts(data.accounts || []);
+          setCountyAuthModel(data);
+          setCountyAccountsError('');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCountyAccountsError(error.message || 'Unable to load county accounts');
+        }
+      }
+    }
+
+    fetchCountyAccounts();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (fetchGeoJSONData) fetchGeoJSONData(); // Call conditionally
@@ -245,14 +344,40 @@ function App() {
     return [...counties.features].sort((a, b) => getCountyCode(a) - getCountyCode(b));
   }, [counties, getCountyCode]);
 
+  const loginCountyOptions = React.useMemo(() => {
+    if (countyAccounts.length > 0) return countyAccounts;
+    return sortedCounties.map((feature) => {
+      const county = getCountyName(feature);
+      return {
+        county,
+        county_code: feature.properties?.ADM1_PCODE,
+        username: countyUsernameForName(county),
+        command_center: `${county} County Command Center`,
+        boundary_scope: 'county_only',
+        gps_required: true,
+      };
+    });
+  }, [countyAccounts, getCountyName, sortedCounties]);
+
+  const selectedLoginAccount = React.useMemo(
+    () => loginCountyOptions.find((account) => account.county === loginCountyName),
+    [loginCountyName, loginCountyOptions]
+  );
+
   useEffect(() => {
-    if (!loginCountyName && sortedCounties.length > 0) {
-      const firstCounty = sortedCounties[0];
-      const name = getCountyName(firstCounty);
+    if (!loginCountyName && loginCountyOptions.length > 0) {
+      const firstCounty = loginCountyOptions[0];
+      const name = firstCounty.county;
       setLoginCountyName(name);
-      setLoginUsername(`${name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}_county`);
+      setLoginUsername(firstCounty.username || countyUsernameForName(name));
     }
-  }, [getCountyName, loginCountyName, sortedCounties]);
+  }, [loginCountyName, loginCountyOptions]);
+
+  useEffect(() => {
+    if (selectedLoginAccount?.username && loginUsername !== selectedLoginAccount.username) {
+      setLoginUsername(selectedLoginAccount.username);
+    }
+  }, [loginUsername, selectedLoginAccount]);
 
   const accessibleCounties = React.useMemo(() => {
     if (!accessCountyName) return sortedCounties;
@@ -450,10 +575,28 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    if (!countySession?.county || !sortedCounties.length) return;
+
+    const county = sortedCounties.find((feature) => (
+      getCountyName(feature) === countySession.county ||
+      feature.properties?.ADM1_PCODE === countySession.county_code
+    ));
+
+    if (!county) return;
+
+    const countyName = getCountyName(county);
+    const alreadyLocked = accessCountyName === countyName && selectedCounty?.properties?.ADM1_PCODE === county.properties?.ADM1_PCODE;
+
+    if (!alreadyLocked) {
+      handleAccessProfileChange(countyName);
+    }
+  }, [accessCountyName, countySession?.county, countySession?.county_code, selectedCounty, sortedCounties, getCountyName]);
+
   const selectLoginCounty = (countyName) => {
     setLoginCountyName(countyName);
-    const username = `${countyName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}_county`;
-    setLoginUsername(username);
+    const account = loginCountyOptions.find((item) => item.county === countyName);
+    setLoginUsername(account?.username || countyUsernameForName(countyName));
     setLoginStatus('');
   };
 
@@ -480,7 +623,8 @@ function App() {
   const handleCountyLogin = async (event) => {
     event.preventDefault();
     const feature = sortedCounties.find((county) => getCountyName(county) === loginCountyName);
-    if (!feature) {
+    const account = selectedLoginAccount;
+    if (!feature || !account) {
       setLoginStatus('Select a county first.');
       return;
     }
@@ -493,7 +637,7 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          county_code: feature.properties?.ADM1_PCODE,
+          county_code: account.county_code || feature.properties?.ADM1_PCODE,
           username: loginUsername,
           password: loginPassword,
           latitude: Number(loginLatitude),
@@ -514,10 +658,23 @@ function App() {
     }
   };
 
-  const signOutCounty = () => {
+  const signOutCounty = async () => {
+    const token = countySession?.token;
     setCountySession(null);
     setLoginStatus('County session ended.');
     handleAccessProfileChange('');
+
+    if (!token) return;
+
+    try {
+      await fetch(`${API_BASE}/api/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+    } catch (error) {
+      console.warn('Unable to revoke county session:', error);
+    }
   };
 
   const handleSearchResultSelect = (result) => {
@@ -743,7 +900,12 @@ function App() {
   const forecastData = activeAnalysis?.weather?.forecast_14_day || [];
   const forestTrendData = activeAnalysis?.forest_trend || [];
   const recommendations = activeAnalysis?.recommendations || [];
-  const currentAccessLabel = accessCountyName ? `${accessCountyName} County Login` : 'National Command Login';
+  const currentAccessLabel = countySession
+    ? countySession.command_center || `${countySession.county} County Command Center`
+    : 'National Command Center';
+  const sessionExpiryLabel = countySession?.expires_at
+    ? new Date(countySession.expires_at).toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })
+    : '8-hour session';
 
   return (
     <div style={{ height: '100vh', width: '100%', position: 'relative' }}>
@@ -814,10 +976,12 @@ function App() {
           {countySession ? (
             <>
               <div style={{ padding: 10, borderRadius: 10, background: 'white', border: '1px solid #cbd5e1', fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
-                {countySession.county} County
+                {countySession.command_center || `${countySession.county} County Command Center`}
               </div>
-              <div style={{ marginTop: 8, fontSize: 11, color: '#0f766e', fontWeight: 700 }}>
+              <div style={{ marginTop: 8, fontSize: 11, color: '#0f766e', fontWeight: 700, lineHeight: 1.35 }}>
                 GPS verified | County-only boundary access
+                <br />
+                {countySession.username} | Expires {sessionExpiryLabel}
               </div>
               <button
                 onClick={signOutCounty}
@@ -828,20 +992,11 @@ function App() {
             </>
           ) : (
             <>
-              <select
-                value={accessCountyName}
-                onChange={(event) => handleAccessProfileChange(event.target.value)}
-                style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid #cbd5e1', background: 'white', fontSize: 13, fontWeight: 700, color: '#0f172a' }}
-              >
-                <option value="">National Command Center</option>
-                {sortedCounties.map((feature) => (
-                  <option key={feature.properties?.ADM1_PCODE || getCountyName(feature)} value={getCountyName(feature)}>
-                    {getCountyName(feature)} County Scope
-                  </option>
-                ))}
-              </select>
-              <div style={{ marginTop: 8, fontSize: 11, color: accessCountyName ? '#0f766e' : '#475569', fontWeight: 700 }}>
+              <div style={{ padding: 10, borderRadius: 10, background: 'white', border: '1px solid #cbd5e1', fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
                 {currentAccessLabel}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 11, color: '#475569', fontWeight: 700, lineHeight: 1.35 }}>
+                National operators can inspect all counties. County-only command center access requires a verified county login.
               </div>
             </>
           )}
@@ -856,24 +1011,29 @@ function App() {
             borderRadius: 14
           }}>
             <label style={{ display: 'block', fontSize: 10, fontWeight: 800, color: '#0f766e', textTransform: 'uppercase', marginBottom: 8 }}>
-              County Login
+              County Command Center Login
             </label>
             <select
               value={loginCountyName}
               onChange={(event) => selectLoginCounty(event.target.value)}
               style={{ width: '100%', padding: 9, borderRadius: 10, border: '1px solid #99f6e4', background: 'white', fontSize: 12, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}
             >
-              {sortedCounties.map((feature) => (
-                <option key={feature.properties?.ADM1_PCODE || getCountyName(feature)} value={getCountyName(feature)}>
-                  {getCountyName(feature)}
+              {loginCountyOptions.map((account) => (
+                <option key={account.county_code || account.county} value={account.county}>
+                  {account.county}
                 </option>
               ))}
             </select>
+            <div style={{ marginBottom: 8, fontSize: 11, color: '#0f766e', fontWeight: 700, lineHeight: 1.35 }}>
+              {selectedLoginAccount?.command_center || `${loginCountyName || 'County'} Command Center`}
+              <br />
+              SQLite account: {selectedLoginAccount?.username || loginUsername || 'loading'}
+            </div>
             <input
               value={loginUsername}
-              onChange={(event) => setLoginUsername(event.target.value)}
+              readOnly
               placeholder="County username"
-              style={{ width: '100%', boxSizing: 'border-box', padding: 9, borderRadius: 10, border: '1px solid #99f6e4', marginBottom: 8, fontSize: 12 }}
+              style={{ width: '100%', boxSizing: 'border-box', padding: 9, borderRadius: 10, border: '1px solid #99f6e4', marginBottom: 8, fontSize: 12, background: '#f8fafc', color: '#0f172a', fontWeight: 700 }}
             />
             <input
               type="password"
@@ -915,6 +1075,16 @@ function App() {
             {loginStatus && (
               <div style={{ marginTop: 8, fontSize: 11, color: loginStatus.toLowerCase().includes('failed') || loginStatus.toLowerCase().includes('denied') || loginStatus.toLowerCase().includes('outside') ? '#b91c1c' : '#0f766e', fontWeight: 700, lineHeight: 1.35 }}>
                 {loginStatus}
+              </div>
+            )}
+            {!loginStatus && countyAuthModel?.local_seed_password && (
+              <div style={{ marginTop: 8, fontSize: 11, color: '#475569', fontWeight: 700, lineHeight: 1.35 }}>
+                Local seed password: {countyAuthModel.local_seed_password}
+              </div>
+            )}
+            {countyAccountsError && (
+              <div style={{ marginTop: 8, fontSize: 11, color: '#b91c1c', fontWeight: 700, lineHeight: 1.35 }}>
+                {countyAccountsError}. Using boundary fallback accounts.
               </div>
             )}
           </form>
@@ -1111,32 +1281,10 @@ function App() {
           </div>
         )}
 
-        {/* Intelligence Parameters (NDVI/NDWI Heatmaps) */}
+        {/* Real mapped feature feed */}
         <div style={{ marginBottom: 24, padding: '12px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
           <label style={{ display: 'block', fontSize: 10, fontWeight: 800, color: '#64748b', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🛰️ Intelligence Feeds</label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-            <button 
-              onClick={() => setLayerVisibility('ndvi', !layers.ndvi)}
-              style={{ 
-                padding: '10px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '11px',
-                background: layers.ndvi ? '#22c55e' : '#f1f5f9', color: layers.ndvi ? 'white' : '#64748b',
-                boxShadow: layers.ndvi ? '0 4px 12px rgba(34, 197, 94, 0.3)' : 'none', transition: 'all 0.2s'
-              }}>🌱 NDVI HEAT</button>
-            <button 
-              onClick={() => setLayerVisibility('ndwi', !layers.ndwi)}
-              style={{ 
-                padding: '10px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '11px',
-                background: layers.ndwi ? '#0ea5e9' : '#f1f5f9', color: layers.ndwi ? 'white' : '#64748b',
-                boxShadow: layers.ndwi ? '0 4px 12px rgba(14, 165, 233, 0.3)' : 'none', transition: 'all 0.2s'
-              }}>💧 NDWI HEAT</button>
-            <button 
-              onClick={() => setLayerVisibility('ndbi', !layers.ndbi)}
-              style={{ 
-                gridColumn: '1 / -1',
-                padding: '10px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '11px',
-                background: layers.ndbi ? '#ea580c' : '#f1f5f9', color: layers.ndbi ? 'white' : '#64748b',
-                boxShadow: layers.ndbi ? '0 4px 12px rgba(234, 88, 12, 0.3)' : 'none', transition: 'all 0.2s'
-              }}>NDBI BUILT-UP</button>
             <button 
               onClick={() => setLayerVisibility('segmentation', !layers.segmentation)}
               style={{ 
@@ -1144,7 +1292,7 @@ function App() {
                 padding: '10px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '11px',
                 background: layers.segmentation ? SEGMENT_PROFILES[segmentClass].color : '#f1f5f9', color: layers.segmentation ? 'white' : '#64748b',
                 boxShadow: layers.segmentation ? `0 4px 12px ${SEGMENT_PROFILES[segmentClass].color}44` : 'none', transition: 'all 0.2s'
-              }}>SIMILAR PIXEL DOTS</button>
+              }}>REAL MAPPED DOTS</button>
           </div>
           <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
             <select
@@ -1156,20 +1304,19 @@ function App() {
                 <option key={key} value={key}>{profile.label}</option>
               ))}
             </select>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 10 }}>
-              <input
-                type="range"
-                min="0.55"
-                max="0.9"
-                step="0.01"
-                value={segmentThreshold}
-                onChange={(event) => setSegmentThreshold(Number(event.target.value))}
-              />
-              <span style={{ fontSize: 11, color: '#475569', fontWeight: 800 }}>{Math.round(segmentThreshold * 100)}%</span>
-            </div>
             <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>
-              Matches: {segmentationStats.count || 0}
+              Source: {segmentationStats.source || 'OpenStreetMap'} | Features: {segmentationStats.count || 0}
             </div>
+            {segmentationStats.status && segmentationStats.status !== 'ok' && (
+              <div style={{ fontSize: 11, color: segmentationStats.status === 'provider_unavailable' || segmentationStats.status === 'error' ? '#b91c1c' : '#64748b', fontWeight: 700, lineHeight: 1.35 }}>
+                {segmentationStats.message || segmentationStats.status}
+              </div>
+            )}
+            {segmentationStats.status === 'ok' && (
+              <div style={{ fontSize: 11, color: '#047857', fontWeight: 800 }}>
+                Real mapped features loaded.
+              </div>
+            )}
           </div>
         </div>
 
@@ -1523,7 +1670,6 @@ function App() {
         dashboardMode={true}
         accessCountyName={accessCountyName}
         segmentClass={segmentClass}
-        segmentThreshold={segmentThreshold}
         onSegmentationStats={setSegmentationStats}
       />
     </div>

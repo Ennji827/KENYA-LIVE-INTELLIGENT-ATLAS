@@ -19,3 +19,12 @@ backend/data/processed/
 *.jp2
 *.zip
 *.rar
+
+# AEIS-K local cleanup artifacts
+frontend/aeis-*.png
+frontend/src/*.backup
+frontend/src/*.backup.*
+frontend/public/data/*_1..geojson
+frontend/public/data/*_1..qmd
+frontend/dist/data/*_1..geojson
+frontend/dist/data/*_1..qmd

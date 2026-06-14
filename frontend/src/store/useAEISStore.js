@@ -125,10 +125,13 @@ const useAEISStore = create((set, get) => ({
     counties: true,
     subcounties: false,
     wards: false,
-    ndvi: false,
-    ndwi: false,
-    ndbi: false,
-    segmentation: true,
+    nasaNdvi: false,
+    nasaLst: false,
+    nasaTrueColor: false,
+    geeNdvi: false,
+    geeNdwi: false,
+    geeLst: false,
+    segmentation: false,
   },
 
   fetchGeoJSONData: async () => {

@@ -84,7 +84,7 @@ export function Legend({ type }) {
         padding: '12px', borderRadius: '14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
         border: '1px solid rgba(255,255,255,0.4)', width: '160px'
       }}>
-        <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Similar Pixels</div>
+        <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mapped Features</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           {items.map(item => (
             <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

@@ -30,39 +30,6 @@ export default function LayerManager() {
           Counties
         </label>
       </div>
-      <div style={{ marginBottom: 8 }}>
-        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={layers.ndvi}
-            onChange={() => toggleLayer('ndvi')}
-            style={{ marginRight: 8 }}
-          />
-          NDVI Heatmap
-        </label>
-      </div>
-      <div>
-        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={layers.ndwi}
-            onChange={() => toggleLayer('ndwi')}
-            style={{ marginRight: 8 }}
-          />
-          NDWI Heatmap
-        </label>
-      </div>
-      <div style={{ marginTop: 8 }}>
-        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={layers.ndbi}
-            onChange={() => toggleLayer('ndbi')}
-            style={{ marginRight: 8 }}
-          />
-          NDBI Built-up
-        </label>
-      </div>
       <div style={{ marginTop: 8 }}>
         <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
           <input
