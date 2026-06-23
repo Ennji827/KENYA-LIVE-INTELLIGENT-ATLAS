@@ -1027,7 +1027,7 @@ function App() {
             <div style={{ marginBottom: 8, fontSize: 11, color: '#0f766e', fontWeight: 700, lineHeight: 1.35 }}>
               {selectedLoginAccount?.command_center || `${loginCountyName || 'County'} Command Center`}
               <br />
-              SQLite account: {selectedLoginAccount?.username || loginUsername || 'loading'}
+              Django account: {selectedLoginAccount?.username || loginUsername || 'loading'}
             </div>
             <input
               value={loginUsername}
@@ -1185,7 +1185,7 @@ function App() {
           <select value={baseMap} onChange={e => setBaseMap(e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #e2e8f0', borderRadius: 10, background: '#f8fafc', fontSize: 14 }}>
             <option value="street">Street</option>
             <option value="satellite">Satellite</option>
-            <option value="hybrid">Hybrid</option>
+            <option value="terrain">Terrain</option>
           </select>
         </div>
 

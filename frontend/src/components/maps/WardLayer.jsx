@@ -44,8 +44,8 @@ export default function WardLayer({
       return {
         color: COLORS.selected,
         weight: 5,
-        fillOpacity: 0,
-        fillColor: "transparent",
+        fillOpacity: 0.12,
+        fillColor: "#fb923c",
         opacity: 1,
       };
     }
@@ -53,8 +53,8 @@ export default function WardLayer({
     return {
       color: active ? COLORS.activeBoundary : COLORS.faded,
       weight: active ? 1.2 : 0.5,
-      fillOpacity: 0,
-      fillColor: "transparent",
+      fillOpacity: active ? 0.04 : 0,
+      fillColor: active ? "#fed7aa" : "transparent",
       opacity: 1,
     };
   };
@@ -65,8 +65,8 @@ export default function WardLayer({
       return {
         color: COLORS.selected,
         weight: 6,
-        fillOpacity: 0,
-        fillColor: "transparent",
+        fillOpacity: 0.14,
+        fillColor: "#fb923c",
         opacity: 1,
       };
     }
@@ -74,8 +74,8 @@ export default function WardLayer({
     return {
       weight: 4,
       color: COLORS.hover,
-      fillOpacity: 0,
-      fillColor: "transparent",
+      fillOpacity: 0.1,
+      fillColor: "#fed7aa",
       opacity: 1,
     };
   };

@@ -128,6 +128,7 @@ const useAEISStore = create((set, get) => ({
     nasaNdvi: false,
     nasaLst: false,
     nasaTrueColor: false,
+    landsatLatest: false,
     geeNdvi: false,
     geeNdwi: false,
     geeLst: false,

@@ -9,7 +9,16 @@ function countyCode(feature) {
   return digits ? digits.padStart(3, "0") : "";
 }
 
-export default function CountyCodeLabels({ data, visible = true }) {
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+export default function CountyCodeLabels({ data, visible = true, showNames = true }) {
   const map = useMap();
   const layerRef = useRef(null);
 
@@ -36,10 +45,10 @@ export default function CountyCodeLabels({ data, visible = true }) {
         const marker = L.marker([lat, lon], {
           interactive: false,
           icon: L.divIcon({
-            className: "aeis-county-code-pin",
-            html: `<span>${code}</span>`,
-            iconSize: [38, 22],
-            iconAnchor: [19, 11],
+            className: `aeis-county-code-pin ${showNames ? "with-name" : "code-only"}`,
+            html: `<span><b>${code}</b>${showNames ? `<em>${escapeHtml(name)}</em>` : ""}</span>`,
+            iconSize: showNames ? [112, 32] : [38, 22],
+            iconAnchor: showNames ? [56, 16] : [19, 11],
           }),
         });
         marker.bindTooltip(`${code} ${name}`, { direction: "top", opacity: 0.9 });
@@ -58,7 +67,7 @@ export default function CountyCodeLabels({ data, visible = true }) {
         layerRef.current = null;
       }
     };
-  }, [data, map, visible]);
+  }, [data, map, showNames, visible]);
 
   return null;
 }

@@ -6,9 +6,7 @@ export default function AlertsPanel({ alerts }) {
     <div className="aeis-card aeis-card-pad">
       <h2 className="aeis-section-title">Alerts</h2>
       {!rows.length && (
-        <p className="aeis-section-copy">
-          No official alert feed is connected yet. AEIS-K will display county crop-stress, rainfall, registry, and fertilizer alerts here only after a real source is connected.
-        </p>
+        <div className="aeis-empty-state">No active operational alerts.</div>
       )}
       <div className="aeis-grid">
         {rows.map((alert) => (

@@ -4,8 +4,9 @@ import { getApiBase } from "../utils/api";
 const nationalSources = [
   { label: "County boundaries", status: "Loaded", note: "Local GeoJSON boundary files" },
   { label: "County codes", status: "Pinned", note: "Official 001-047 order" },
-  { label: "County login isolation", status: "Active", note: "SQLite accounts, sessions, GPS geofence" },
+  { label: "County login isolation", status: "Active", note: "Django accounts, sessions, GPS geofence" },
   { label: "Rainfall/weather", status: "Live forecast", note: "Open-Meteo model forecast connected; official station feed recommended" },
+  { label: "Latest Landsat", status: "Connected", note: "USGS LandsatLook Collection 2 catalogue and browse overlay" },
   { label: "NDVI/NDWI rasters", status: "Provider required", note: "Use NASA for visual context; connect GEE/Sentinel/Landsat for official county rasters" },
   { label: "Google Earth Engine", status: "Checking", note: "Backend GEE configuration status" },
   { label: "Farmer registry", status: "Source required", note: "Connect verified county farmer records" },

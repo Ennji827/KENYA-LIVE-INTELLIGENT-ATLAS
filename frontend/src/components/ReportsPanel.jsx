@@ -37,11 +37,11 @@ export default function ReportsPanel({ reports, compact = false }) {
     <div className="aeis-card aeis-card-pad">
       <h2 className="aeis-section-title">Reports</h2>
       <p className="aeis-section-copy">
-        County, ward, and farm report records will appear here after real report jobs are created from connected sources.
+        Latest evidence-backed reports available to this account.
       </p>
       {!rows.length && (
         <div className="aeis-empty-state">
-          No source-backed report records are available yet.
+          No reports have been generated yet. Use the Reports workspace to create one.
         </div>
       )}
       {rows.map((report) => (

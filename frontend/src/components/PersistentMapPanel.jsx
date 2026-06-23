@@ -40,14 +40,12 @@ export default function PersistentMapPanel({ filter }) {
 
   const chips = [
     { key: "counties", label: "Counties" },
-    { key: "subcounties", label: "Sub-counties" },
     { key: "wards", label: "Wards" },
-    { key: "nasaTrueColor", label: "NASA true color" },
-    { key: "nasaNdvi", label: "NASA NDVI" },
-    { key: "nasaLst", label: "NASA LST" },
-    { key: "geeNdvi", label: "GEE NDVI" },
-    { key: "geeNdwi", label: "GEE NDWI" },
-    { key: "geeLst", label: "GEE LST" },
+    { key: "landsatLatest", label: "Latest Landsat" },
+    { key: "nasaTrueColor", label: "Satellite" },
+    { key: "nasaNdvi", label: "NDVI" },
+    { key: "geeNdwi", label: "NDWI" },
+    { key: "nasaLst", label: "LST" },
   ];
 
   return (
@@ -63,7 +61,7 @@ export default function PersistentMapPanel({ filter }) {
           <select value={baseMap} onChange={(event) => setBaseMap(event.target.value)} className="aeis-mini-select">
             <option value="street">Street</option>
             <option value="satellite">Satellite</option>
-            <option value="hybrid">Hybrid</option>
+            <option value="terrain">Terrain</option>
           </select>
         </div>
 
@@ -74,10 +72,10 @@ export default function PersistentMapPanel({ filter }) {
               type="button"
               className={`aeis-layer-chip ${layers[chip.key] ? "active" : ""}`}
               onClick={() => {
-                const providerLayer = chip.key.startsWith("nasa") || chip.key.startsWith("gee");
+                const providerLayer = chip.key === "landsatLatest" || chip.key.startsWith("nasa") || chip.key.startsWith("gee");
                 if (providerLayer) setBaseMap("satellite");
                 if (providerLayer) {
-                  ["nasaTrueColor", "nasaNdvi", "nasaLst", "geeNdvi", "geeNdwi", "geeLst"].forEach((key) => {
+                  ["landsatLatest", "nasaTrueColor", "nasaNdvi", "nasaLst", "geeNdvi", "geeNdwi", "geeLst"].forEach((key) => {
                     setLayerVisibility(key, key === chip.key ? !layers[chip.key] : false);
                   });
                   return;
@@ -96,7 +94,7 @@ export default function PersistentMapPanel({ filter }) {
             farms={[]}
             dashboardMode
             accessCountyName={filter.county || ""}
-            mapHeight="360px"
+            mapHeight="460px"
             hoverSelectEnabled={false}
           />
         </div>
@@ -105,7 +103,7 @@ export default function PersistentMapPanel({ filter }) {
           {loadingGeoJSON ? "Loading administrative boundaries..." : geoJSONError || "County boundary and provider-layer context ready"}
         </div>
       </div>
-      <LiveWeatherForecastPanel countyName={filter.county || ""} />
+      {filter.county && <LiveWeatherForecastPanel countyName={filter.county} compact mapAdjacent />}
     </aside>
   );
 }

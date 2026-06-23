@@ -47,8 +47,8 @@ export default function SubCountyLayer({
         : "transparent", // Hide subcounties of other counties for clarity
 
       weight: selected ? 4 : active ? 1.5 : 0, 
-      fillOpacity: 0,
-      fillColor: "transparent",
+      fillOpacity: selected ? 0.15 : active ? 0.06 : 0,
+      fillColor: selected ? "#fb923c" : "#fdba74",
       opacity: 1,
     };
   };
@@ -76,8 +76,8 @@ export default function SubCountyLayer({
           layer.setStyle({
             weight: 4,
             color: COLORS.hover,
-            fillOpacity: 0,
-            fillColor: "transparent",
+            fillOpacity: 0.14,
+            fillColor: "#fdba74",
             opacity: 1,
           });
           try { layer.bringToFront(); } catch (e) {}

@@ -19,4 +19,12 @@ export const SEGMENT_PROFILES = {
     label: "Bare land",
     color: "#d97706",
   },
+  hospitals: {
+    label: "Hospitals",
+    color: "#dc2626",
+  },
+  roads: {
+    label: "Roads",
+    color: "#475569",
+  },
 };

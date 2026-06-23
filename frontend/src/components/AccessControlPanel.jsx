@@ -108,7 +108,7 @@ export default function AccessControlPanel() {
       <div className="aeis-grid aeis-three-col">
         <div className="aeis-score-block">
           <span>Auth storage</span>
-          <strong>SQLite</strong>
+          <strong>Django ORM</strong>
           <small>{model?.auth_model || "role based access control"}</small>
         </div>
         <div className="aeis-score-block">

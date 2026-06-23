@@ -11,6 +11,7 @@ function statusLabel(configured) {
 
 export default function RemoteSensingImageryPanel({ county }) {
   const [geeStatus, setGeeStatus] = useState(null);
+  const [landsatStatus, setLandsatStatus] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,6 +29,22 @@ export default function RemoteSensingImageryPanel({ county }) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const query = county?.name ? `?county=${encodeURIComponent(county.name)}&lookback_days=365&max_cloud=35` : "";
+    fetch(`${getApiBase()}/api/data/imagery/landsat/latest${query}`)
+      .then((response) => response.json().then((payload) => ({ response, payload })))
+      .then(({ response, payload }) => {
+        if (!cancelled && response.ok) setLandsatStatus(payload);
+      })
+      .catch(() => {
+        if (!cancelled) setLandsatStatus({ status: "unavailable", scene: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [county?.name]);
 
   const geeLayers = geeStatus?.layers || {};
   const ndviConnected = Boolean(geeLayers.geeNdvi?.configured);
@@ -48,6 +65,21 @@ export default function RemoteSensingImageryPanel({ county }) {
       </div>
 
       <div className="aeis-imagery-grid">
+        <div className="aeis-imagery-tile satellite">
+          {landsatStatus?.map_overlay?.preview_url ? (
+            <img className="aeis-imagery-photo" src={landsatStatus.map_overlay.preview_url} alt="" loading="lazy" />
+          ) : (
+            <div className="aeis-imagery-photo" />
+          )}
+          <div>
+            <strong>Latest USGS Landsat</strong>
+            <span>
+              {landsatStatus?.scene
+                ? `${landsatStatus.scene.platform} catalogue acquisition ${landsatStatus.scene.date}; latest open map rendering ${landsatStatus.map_overlay?.date || "pending"}.`
+                : "Checking the current Landsat Collection 2 catalogue."}
+            </span>
+          </div>
+        </div>
         <div className="aeis-imagery-tile satellite">
           <div className="aeis-imagery-photo" />
           <div>

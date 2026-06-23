@@ -1,6 +1,9 @@
 import React, { useEffect, useCallback, useState, useRef } from "react";
-import { MapContainer, TileLayer, useMap, ScaleControl, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, WMSTileLayer, useMap, ScaleControl, useMapEvents } from "react-leaflet";
 import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "leaflet-draw/dist/leaflet.draw.css";
+import "leaflet-draw";
 import * as turf from '@turf/turf'; // Needed for spatial queries
 import useAEISStore from "../../store/useAEISStore";
 
@@ -10,19 +13,40 @@ import InfoPanel from "../Ui/InfoPanel";
 
 import CountyLayer from "./CountyLayer";
 import CountyCodeLabels from "./CountyCodeLabels";
+import BoundaryLabels from "./BoundaryLabels";
 import SubCountyLayer from "./SubCountyLayer";
 import WardLayer from "./WardLayer";
 import SegmentationLayer from "./SegmentationLayer";
 import { getApiBase } from "../../utils/api";
+
+window.L = L;
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+});
 
 const COLORS = {
   farm: { color: '#22c55e', weight: 3, fillOpacity: 0.3 }
 };
 
 const baseMaps = {
-  street: { name: 'Street', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png' },
-  satellite: { name: 'Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' },
-  hybrid: { name: 'Hybrid', url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' }
+  street: {
+    name: "OpenStreetMap",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  },
+  satellite: {
+    name: "World imagery",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Esri, Maxar, Earthstar Geographics, and contributors",
+  },
+  terrain: {
+    name: "OpenTopoMap",
+    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    attribution: 'Map data &copy; OpenStreetMap contributors, map style &copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
+  },
 };
 
 const realImageryLayers = {
@@ -107,11 +131,16 @@ export default function LiveMap({
   segmentClass = "buildings",
   onSegmentationStats,
   mapHeight = "100vh",
-  hoverSelectEnabled = true,
+  hoverSelectEnabled = false,
+  onCountySelect,
+  onSubCountySelect,
+  onWardSelect,
 }) {
   const [map, setMap] = useState(null);
   const [currentZoom, setCurrentZoom] = useState(6);
   const [geeConfig, setGeeConfig] = useState(null);
+  const [landsatLatest, setLandsatLatest] = useState(null);
+  const [landsatStatus, setLandsatStatus] = useState("");
   const farmLayersRef = useRef({});
   const fetchAreaAnalysis = useAEISStore((s) => s.fetchAreaAnalysis);
 
@@ -145,6 +174,57 @@ export default function LiveMap({
     .filter(Boolean);
   const activeConfiguredGeeLayers = activeGeeLayers.filter((layer) => layer.configured && layer.tile_url);
   const activeMissingGeeLayers = activeGeeLayers.filter((layer) => !layer.configured || !layer.tile_url);
+  const selectedCountyName = selectedCounty?.properties?.ADM1_EN || "";
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!layers.landsatLatest) {
+      setLandsatLatest(null);
+      setLandsatStatus("");
+      return undefined;
+    }
+
+    async function loadLatestLandsat() {
+      const query = new URLSearchParams({ max_cloud: "35", lookback_days: "365" });
+      if (selectedCountyName) query.set("county", selectedCountyName);
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 45000);
+      setLandsatStatus("Finding latest Landsat scene...");
+      try {
+        const response = await fetch(`${getApiBase()}/api/data/imagery/landsat/latest?${query}`, {
+          signal: controller.signal,
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "Landsat source unavailable");
+        if (!cancelled) {
+          setLandsatLatest(payload);
+          setLandsatStatus(
+            payload.map_overlay
+              ? `${payload.scene?.platform || "Landsat"} map ${payload.map_overlay.date}`
+              : payload.scene
+              ? `${payload.scene.platform || "Landsat"} catalog ${payload.scene.date}`
+              : "No low-cloud Landsat scene found"
+          );
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setLandsatLatest(null);
+          setLandsatStatus(
+            error.name === "AbortError"
+              ? "Landsat catalogue is taking too long; retry the layer"
+              : error.message || "Landsat source unavailable"
+          );
+        }
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+
+    loadLatestLandsat();
+    return () => {
+      cancelled = true;
+    };
+  }, [layers.landsatLatest, selectedCountyName]);
 
   useEffect(() => {
     let cancelled = false;
@@ -297,6 +377,27 @@ export default function LiveMap({
     };
   }, [accessibleWards, selectedSubCounty, linkedWards]);
 
+  const linkedSubcountyData = React.useMemo(() => {
+    if (!visibleSubcounties || !selectedCounty) return null;
+    return { ...visibleSubcounties, features: linkedSubcounties };
+  }, [linkedSubcounties, selectedCounty, visibleSubcounties]);
+
+  const countyLabelData = React.useMemo(() => {
+    if (!visibleCounties || !selectedCounty) return visibleCounties;
+    const selectedName = selectedCounty.properties?.ADM1_EN;
+    return {
+      ...visibleCounties,
+      features: visibleCounties.features.filter(
+        (feature) => feature.properties?.ADM1_EN === selectedName
+      ),
+    };
+  }, [selectedCounty, visibleCounties]);
+
+  const linkedWardData = React.useMemo(() => {
+    if (!visibleWards || !selectedSubCounty) return null;
+    return { ...visibleWards, features: linkedWards };
+  }, [linkedWards, selectedSubCounty, visibleWards]);
+
   const segmentationScope = React.useMemo(() => {
     if (selectedWard) {
       return {
@@ -421,7 +522,23 @@ export default function LiveMap({
         <ScaleControl position="bottomleft" imperial={false} />
         <NorthArrow />
 
-        <TileLayer url={baseMaps[baseMap].url} />
+        <TileLayer
+          url={(baseMaps[baseMap] || baseMaps.street).url}
+          attribution={(baseMaps[baseMap] || baseMaps.street).attribution}
+        />
+        {layers.landsatLatest && landsatLatest?.map_overlay && (
+          <WMSTileLayer
+            url={landsatLatest.map_overlay.url}
+            layers={landsatLatest.map_overlay.layers}
+            styles={landsatLatest.map_overlay.styles}
+            format={landsatLatest.map_overlay.format}
+            transparent={landsatLatest.map_overlay.transparent}
+            version={landsatLatest.map_overlay.version}
+            time={landsatLatest.map_overlay.date}
+            opacity={0.82}
+            attribution="Digital Earth Africa; Landsat Collection 2 courtesy USGS"
+          />
+        )}
         {layers.nasaTrueColor && (
           <TileLayer
             url={realImageryLayers.nasaTrueColor.url}
@@ -454,9 +571,15 @@ export default function LiveMap({
             attribution="Google Earth Engine"
           />
         ))}
-        {(layers.nasaTrueColor || layers.nasaNdvi || layers.nasaLst || activeGeeLayers.length > 0) && (
+        {(layers.landsatLatest || layers.nasaTrueColor || layers.nasaNdvi || layers.nasaLst || activeGeeLayers.length > 0) && (
           <div className="aeis-map-source-badge leaflet-bottom leaflet-right">
             <div className="leaflet-control">
+              {layers.landsatLatest && (
+                <span>
+                  Latest Landsat: {landsatStatus || "loading"}
+                  {landsatLatest?.map_overlay?.cloud_cover != null ? ` | ${landsatLatest.map_overlay.cloud_cover}% cloud` : ""}
+                </span>
+              )}
               {[realImageryLayers.nasaTrueColor, realImageryLayers.nasaNdvi, realImageryLayers.nasaLst]
                 .filter((item) =>
                   (item === realImageryLayers.nasaTrueColor && layers.nasaTrueColor) ||
@@ -493,6 +616,7 @@ export default function LiveMap({
               setSelectedCounty(f);
               setSelectedSubCounty(null);
               setSelectedWard(null);
+              onCountySelect?.(f);
               zoomTo(f);
             }}
             onHover={(f) => {
@@ -513,8 +637,8 @@ export default function LiveMap({
             }}
           />
         )}
-        {visibleCounties && (layers?.counties ?? true) && (
-          <CountyCodeLabels data={visibleCounties} visible />
+        {countyLabelData && (layers?.counties ?? true) && (
+          <CountyCodeLabels data={countyLabelData} visible showNames={Boolean(selectedCounty)} />
         )}
 
         {visibleSubcounties && (layers?.subcounties) && (
@@ -527,9 +651,19 @@ export default function LiveMap({
               hoverAutoSelectRef.current = false;
               setSelectedSubCounty(f);
               setSelectedWard(null);
+              onSubCountySelect?.(f);
               zoomTo(f);
             }}
             onHover={(f) => setHoveredSubCounty(f)}
+          />
+        )}
+        {linkedSubcountyData && layers?.subcounties && (
+          <BoundaryLabels
+            data={linkedSubcountyData}
+            visible
+            nameProperty="ADM2_EN"
+            className="subcounty"
+            minZoom={7}
           />
         )}
 
@@ -543,9 +677,19 @@ export default function LiveMap({
             onSelect={(f) => {
               hoverAutoSelectRef.current = false;
               setSelectedWard(f);
+              onWardSelect?.(f);
               zoomTo(f);
             }}
             onHover={(f) => setHoveredWard(f)}
+          />
+        )}
+        {linkedWardData && layers?.wards && selectedSubCounty && (
+          <BoundaryLabels
+            data={linkedWardData}
+            visible
+            nameProperty="shapeName"
+            className="ward"
+            minZoom={9}
           />
         )}
 

@@ -3,9 +3,10 @@ import CountyFilter from "../components/CountyFilter";
 import CropHealthPanel from "../components/CropHealthPanel";
 import FertilizerPanel from "../components/FertilizerPanel";
 import StatCard from "../components/StatCard";
-import { getCountyByName, sampleCounties } from "../data/sampleDashboardData";
+import FieldReportsPanel from "../components/FieldReportsPanel";
+import { getCountyByName, kenyaCounties } from "../data/kenyaCountyCatalog";
 
-export default function FarmerDashboard({ filter, setFilter, lockedCounty }) {
+export default function FarmerDashboard({ filter, setFilter, lockedCounty, session }) {
   const selectedCounty = useMemo(() => getCountyByName(filter.county), [filter.county]);
 
   if (!filter.county) {
@@ -21,7 +22,7 @@ export default function FarmerDashboard({ filter, setFilter, lockedCounty }) {
           </div>
           <div className="aeis-status-pill">No county selected</div>
         </div>
-        <CountyFilter counties={sampleCounties} value={filter} onChange={setFilter} lockedCounty={lockedCounty} />
+        <CountyFilter counties={kenyaCounties} value={filter} onChange={setFilter} lockedCounty={lockedCounty} />
       </>
     );
   }
@@ -39,7 +40,7 @@ export default function FarmerDashboard({ filter, setFilter, lockedCounty }) {
         <div className="aeis-status-pill">{selectedCounty?.displayName || filter.county}</div>
       </div>
 
-      <CountyFilter counties={sampleCounties} value={filter} onChange={setFilter} lockedCounty={lockedCounty} />
+      <CountyFilter counties={kenyaCounties} value={filter} onChange={setFilter} lockedCounty={lockedCounty} />
 
       <div style={{ height: 16 }} />
       <div className="aeis-grid aeis-kpi-grid">
@@ -48,6 +49,14 @@ export default function FarmerDashboard({ filter, setFilter, lockedCounty }) {
         <StatCard label="Farm Health" value="Blocked" note="Requires real NDVI/NDWI" tone="amber" />
         <StatCard label="Weather Advisory" value="Live forecast" note="Shown below map" tone="blue" />
       </div>
+
+      <div style={{ height: 16 }} />
+      <FieldReportsPanel
+        session={session}
+        countyName={filter.county}
+        subcountyName={filter.subcounty}
+        wardName={filter.ward}
+      />
 
       <div style={{ height: 16 }} />
       <div className="aeis-grid aeis-two-col">

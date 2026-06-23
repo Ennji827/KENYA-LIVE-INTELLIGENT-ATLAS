@@ -12,14 +12,16 @@ function statusClass(status) {
   return String(status).toLowerCase() === "success" ? "success" : "failed";
 }
 
-export default function AuthAuditPanel() {
+export default function AuthAuditPanel({ session }) {
   const [events, setEvents] = useState([]);
   const [status, setStatus] = useState("Loading audit log...");
 
   const loadAuditLog = async () => {
     setStatus("Loading audit log...");
     try {
-      const response = await fetch(`${getApiBase()}/api/auth/audit-log?limit=80`);
+      const response = await fetch(`${getApiBase()}/api/auth/audit-log?limit=80`, {
+        headers: { Authorization: `Bearer ${session?.token || ""}` },
+      });
       const payload = await response.json();
       if (!response.ok) {
         setStatus(payload.error || "Audit log unavailable.");
@@ -34,7 +36,7 @@ export default function AuthAuditPanel() {
 
   useEffect(() => {
     loadAuditLog();
-  }, []);
+  }, [session?.token]);
 
   return (
     <div className="aeis-card aeis-card-pad">
@@ -42,7 +44,7 @@ export default function AuthAuditPanel() {
         <div>
           <h2 className="aeis-section-title">Authentication Audit Log</h2>
           <p className="aeis-section-copy">
-            SQLite record of county email login attempts, GPS failures, successful sessions, and sign-outs.
+            Django audit record of county email login attempts, GPS failures, successful sessions, and sign-outs.
           </p>
         </div>
         <button type="button" className="aeis-btn ghost" onClick={loadAuditLog}>

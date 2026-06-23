@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
+    "dev": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../aeis.ps1 dev-frontend",
+    "dev:raw": "vite --host 0.0.0.0",
     "dev:local": "vite --host 127.0.0.1",
     "build": "vite build"
   },
@@ -14,6 +15,7 @@
     "leaflet": "^1.9.4",
     "leaflet-draw": "^1.0.4",
     "leaflet.heat": "^0.2.0",
+    "lucide-react": "^0.468.0",
     "mapbox-gl": "^3.24.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -25,7 +27,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.0.0",
+    "@vitejs/plugin-react": "^6.0.2",
     "vite": "^8.0.16"
   }
 }

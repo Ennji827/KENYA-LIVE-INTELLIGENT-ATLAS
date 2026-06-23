@@ -1,102 +1,91 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  BellRing,
+  ClipboardCheck,
+  Database,
+  FileCheck2,
+  MapPinned,
+  RadioTower,
+} from "lucide-react";
 import DashboardLayout from "../components/DashboardLayout";
 import AuthGateway, { clearAuthSession, readAuthSession, saveAuthSession } from "../components/AuthGateway";
 import StatCard from "../components/StatCard";
+import CommandCenterHero from "../components/CommandCenterHero";
 import CountyFilter from "../components/CountyFilter";
 import LandCoverChart from "../components/LandCoverChart";
 import CropHealthPanel from "../components/CropHealthPanel";
 import AlertsPanel from "../components/AlertsPanel";
 import ReportsPanel from "../components/ReportsPanel";
 import FertilizerPanel from "../components/FertilizerPanel";
-import PersistentMapPanel from "../components/PersistentMapPanel";
 import RemoteSensingImageryPanel from "../components/RemoteSensingImageryPanel";
 import CountyIntelligenceBrief from "../components/CountyIntelligenceBrief";
 import DataAuthorityPanel from "../components/DataAuthorityPanel";
 import RealtimeOperationsFeed from "../components/RealtimeOperationsFeed";
-import SystemActualizationPanel from "../components/SystemActualizationPanel";
-import MapView from "./MapView";
-import CountyDashboard from "./CountyDashboard";
-import FarmerDashboard from "./FarmerDashboard";
-import Reports from "./Reports";
-import AdminPanel from "./AdminPanel";
-import CountySites from "./CountySites";
 import {
-  alerts as sampleAlerts,
   getCountyByName,
-  getDashboardKpis,
   nationalSummary,
-  reports as sampleReports,
-  sampleCounties,
-} from "../data/sampleDashboardData";
+  kenyaCounties,
+} from "../data/kenyaCountyCatalog";
 import { getApiBase } from "../utils/api";
 import "../styles/dashboard.css";
 
-function Header({ eyebrow = "National agriculture overview" }) {
+const MapView = lazy(() => import("./MapView"));
+const CountyDashboard = lazy(() => import("./CountyDashboard"));
+const FarmerDashboard = lazy(() => import("./FarmerDashboard"));
+const Reports = lazy(() => import("./Reports"));
+const IntelligenceAssistant = lazy(() => import("./IntelligenceAssistant"));
+const AdminPanel = lazy(() => import("./AdminPanel"));
+const CountySites = lazy(() => import("./CountySites"));
+const PersistentMapPanel = lazy(() => import("../components/PersistentMapPanel"));
+const LiveWeatherForecastPanel = lazy(() => import("../components/LiveWeatherForecastPanel"));
+
+function WorkspaceLoading() {
   return (
-    <div className="aeis-topbar">
-      <div>
-        <div className="aeis-kicker">{eyebrow}</div>
-        <h1 className="aeis-title">{nationalSummary.title}</h1>
-        <p className="aeis-subtitle">{nationalSummary.subtitle}</p>
-      </div>
-      <div className="aeis-status-pill">{sampleCounties.length} counties tracked</div>
+    <div className="aeis-card aeis-card-pad aeis-workspace-loading" role="status">
+      <span className="aeis-skeleton wide" />
+      <span className="aeis-skeleton" />
+      <span className="aeis-skeleton short" />
     </div>
   );
 }
 
-function CommandCenterOverview({ counties }) {
+function CommandCenterOverview({ dashboardData }) {
+  const gaps = dashboardData.dataGaps || [];
   return (
-    <div className="aeis-grid">
-      <div className="aeis-card aeis-card-pad">
-        <h2 className="aeis-section-title">National Command Center Data Sources</h2>
-        <p className="aeis-section-copy">
-          AEIS-K now shows only connected sources or source-required states. Select a county for boundary context, and use the live forecast below the map for current weather.
-        </p>
-        <div className="aeis-command-feed-grid">
-          <div>
-            <h3 className="aeis-mini-heading">Connected Now</h3>
-            <div className="aeis-command-list">
-              <div className="aeis-command-row"><span>GIS</span><strong>County, sub-county, ward boundaries</strong><em>Local</em></div>
-              <div className="aeis-command-row"><span>WX</span><strong>Live weather forecast</strong><em>API</em></div>
-              <div className="aeis-command-row"><span>IMG</span><strong>NASA true color, NDVI, LST map layers</strong><em>NASA</em></div>
-              <div className="aeis-command-row"><span>OSM</span><strong>Mapped feature dots</strong><em>Live</em></div>
-            </div>
+    <div className="aeis-card aeis-card-pad">
+      <h2 className="aeis-section-title">National Evidence Coverage</h2>
+      <p className="aeis-section-copy">
+        Connected services available for current analysis. Select a county when you need local detail.
+      </p>
+      <div className="aeis-command-feed-grid aeis-command-feed-grid-compact">
+        <div>
+          <h3 className="aeis-mini-heading">Connected evidence</h3>
+          <div className="aeis-command-list">
+            <div className="aeis-command-row"><span>GIS</span><strong>47 county boundaries with sub-county and ward drill-down</strong><em>Ready</em></div>
+            <div className="aeis-command-row"><span>WX</span><strong>Open-Meteo ten-day forecasts</strong><em>Live</em></div>
+            <div className="aeis-command-row"><span>HIST</span><strong>NASA POWER climate history</strong><em>Live</em></div>
+            <div className="aeis-command-row"><span>SAT</span><strong>Sentinel-2 and Landsat catalogues</strong><em>Live</em></div>
           </div>
-          <div>
-            <h3 className="aeis-mini-heading">Source Required</h3>
-            <div className="aeis-command-list">
-              <div className="aeis-command-row"><span>NDVI</span><strong>County/farm raster values</strong><em>GEE</em></div>
-              <div className="aeis-command-row"><span>NDWI</span><strong>County/farm moisture raster values</strong><em>GEE</em></div>
-              <div className="aeis-command-row"><span>LC</span><strong>Classified land-cover percentages</strong><em>Source</em></div>
-              <div className="aeis-command-row"><span>REG</span><strong>Verified farmer registry</strong><em>County</em></div>
-            </div>
-          </div>
-          <div>
-            <h3 className="aeis-mini-heading">Public Sharing Guard</h3>
-            <div className="aeis-command-list">
-              <div className="aeis-command-row"><span>LOCK</span><strong>Hide test passwords on public link</strong><em>On</em></div>
-              <div className="aeis-command-row"><span>GPS</span><strong>Block county GPS bypass unless unlocked</strong><em>On</em></div>
-              <div className="aeis-command-row"><span>AUTH</span><strong>SQLite login/session audit</strong><em>On</em></div>
-              <div className="aeis-command-row"><span>MAP</span><strong>Only provider-backed index layers</strong><em>On</em></div>
-            </div>
+        </div>
+        <div>
+          <h3 className="aeis-mini-heading">Operational records</h3>
+          <div className="aeis-command-list">
+            <div className="aeis-command-row"><span>GIS</span><strong>Uploaded GIS datasets</strong><em>{dashboardData.uploadedAssets || 0}</em></div>
+            <div className="aeis-command-row"><span>FIELD</span><strong>Verified field reports</strong><em>{dashboardData.verifiedFieldReports || 0}</em></div>
+            <div className="aeis-command-row"><span>AI</span><strong>Saved intelligence analyses</strong><em>{dashboardData.intelligenceInsights || 0}</em></div>
+            <div className="aeis-command-row"><span>PUB</span><strong>Published reports</strong><em>{dashboardData.publishedReports || 0}</em></div>
           </div>
         </div>
       </div>
-
-      <div className="aeis-card aeis-card-pad">
-        <h2 className="aeis-section-title">County Separation Registry</h2>
-        <p className="aeis-section-copy">
-          Each county is pinned by its official three-digit code and can run as an isolated county workspace after county login.
-        </p>
-        <div className="aeis-county-registry">
-          {counties.map((county) => (
-            <div key={county.name}>
-              <span>{county.countyCode}</span>
-              <strong>{county.name}</strong>
-            </div>
-          ))}
-        </div>
-      </div>
+      {gaps.length > 0 && (
+        <details className="aeis-data-gaps-disclosure">
+          <summary>{gaps.length} datasets are not yet connected</summary>
+          <p>They remain excluded from headline KPIs until an authoritative provider is configured.</p>
+          <ul>
+            {gaps.map((gap) => <li key={gap}>{gap}</li>)}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }
@@ -187,20 +176,50 @@ function OperationsContext({ activeInsight, county, stats }) {
   );
 }
 
-function DashboardHome({ filter, setFilter, dashboardData, alertData, reportData, lockedCounty }) {
+function DashboardHome({
+  filter,
+  setFilter,
+  dashboardData,
+  alertData,
+  reportData,
+  lockedCounty,
+  session,
+  dataStatus,
+  updatedAt,
+  onRefresh,
+  onNavigate,
+}) {
   const [activeInsight, setActiveInsight] = useState("farmers");
   const selectedCounty = getCountyByName(filter.county);
   const stats = selectedCounty?.stats;
-  const countyKpis = getDashboardKpis(selectedCounty || dashboardData).map((kpi) => ({
-    ...kpi,
-    note: kpi.label === "Registered Farms" && selectedCounty ? `${filter.county} county scope` : kpi.note,
-  }));
+  const heroKpis = selectedCounty
+    ? [
+        { label: "County Scope", value: selectedCounty.countyCode, note: selectedCounty.name, tone: "navy", icon: MapPinned },
+        { label: "Weather Forecast", value: "10 days", note: "Open-Meteo best match", tone: "blue", icon: RadioTower },
+        { label: "Boundaries", value: "Loaded", note: "County, sub-county and ward", tone: "green", icon: MapPinned },
+        { label: "Satellite Search", value: "2 catalogues", note: "Sentinel-2 and Landsat", tone: "green", icon: Database },
+      ]
+    : [
+        { label: "County Coverage", value: dashboardData.countiesTracked ?? 47, note: "47 of 47 administrative areas", tone: "green", icon: MapPinned },
+        { label: "Connected Sources", value: dashboardData.connectedSources ?? "—", note: "Weather, climate and satellite", tone: "blue", icon: RadioTower },
+        { label: "GIS Datasets", value: dashboardData.uploadedAssets ?? "—", note: "Validated uploaded assets", tone: "navy", icon: Database },
+        { label: "Active Alerts", value: dashboardData.openAlerts ?? "—", note: "Unresolved operational alerts", tone: dashboardData.openAlerts ? "amber" : "green", icon: BellRing },
+        { label: "Verified Field Reports", value: dashboardData.verifiedFieldReports ?? "—", note: `${dashboardData.fieldReports ?? "—"} total submitted`, tone: "green", icon: ClipboardCheck },
+        { label: "Reports", value: dashboardData.reportsReady ?? "—", note: `${dashboardData.publishedReports ?? "—"} published`, tone: "navy", icon: FileCheck2 },
+      ];
 
   return (
     <>
-      <Header />
+      <CommandCenterHero
+        selectedCounty={selectedCounty}
+        session={session}
+        dataStatus={dataStatus}
+        updatedAt={updatedAt}
+        onRefresh={onRefresh}
+        onNavigate={onNavigate}
+      />
       <div className="aeis-grid aeis-kpi-grid">
-        {countyKpis.map((kpi) => {
+        {heroKpis.map((kpi) => {
           const insight = insightForKpi(kpi.label);
           return (
             <StatCard
@@ -214,24 +233,11 @@ function DashboardHome({ filter, setFilter, dashboardData, alertData, reportData
       </div>
 
       <div style={{ height: 16 }} />
-      <CountyFilter counties={sampleCounties} value={filter} onChange={setFilter} lockedCounty={lockedCounty} />
+      <CountyFilter counties={kenyaCounties} value={filter} onChange={setFilter} lockedCounty={lockedCounty} />
 
       <div style={{ height: 16 }} />
       <div className="aeis-grid aeis-two-col">
         <div className="aeis-grid">
-          <div className="aeis-card aeis-card-pad">
-            <h2 className="aeis-section-title">National Agriculture Overview</h2>
-            <p className="aeis-section-copy">
-              AEIS-K combines real county boundaries, farm mapping tools, provider-backed imagery layers, live weather forecast,
-              and source-required safeguards into one county decision-support workspace for Kenya's 47 counties.
-            </p>
-            <div className="aeis-grid aeis-four-col">
-              <StatCard label="Counties Tracked" value={dashboardData.countiesTracked || sampleCounties.length} tone="green" />
-              <StatCard label="Reports Ready" value={dashboardData.reportsReady} tone="navy" />
-              <StatCard label="Selected County" value={filter.county || "National"} tone="green" />
-              <StatCard label="Selected Ward" value={filter.ward || "All wards"} tone="blue" />
-            </div>
-          </div>
           {selectedCounty ? (
             <>
               <CountyIntelligenceBrief county={selectedCounty} />
@@ -239,12 +245,18 @@ function DashboardHome({ filter, setFilter, dashboardData, alertData, reportData
               <LandCoverChart stats={stats} />
             </>
           ) : (
-            <CommandCenterOverview counties={sampleCounties} />
+            <CommandCenterOverview dashboardData={dashboardData} />
           )}
           <ReportsPanel reports={reportData.slice(0, 3)} compact />
         </div>
         <div className="aeis-grid">
-          <RealtimeOperationsFeed countyName={selectedCounty?.name || ""} />
+          {selectedCounty ? (
+            <RealtimeOperationsFeed countyName={selectedCounty.name} />
+          ) : (
+            <Suspense fallback={<WorkspaceLoading />}>
+              <LiveWeatherForecastPanel />
+            </Suspense>
+          )}
           {selectedCounty ? (
             <>
               <RemoteSensingImageryPanel county={selectedCounty} />
@@ -253,23 +265,9 @@ function DashboardHome({ filter, setFilter, dashboardData, alertData, reportData
               <FertilizerPanel stats={stats} countyName={filter.county} />
             </>
           ) : (
-            <>
-              <SystemActualizationPanel compact />
-              <DataAuthorityPanel />
-              <div className="aeis-card aeis-card-pad">
-                <h2 className="aeis-section-title">County Login Model</h2>
-                <p className="aeis-section-copy">
-                  Yes. AEIS-K can individualize every county. The backend already supports county-specific users, sessions, GPS geofencing, and county-scoped access.
-                </p>
-                <div className="aeis-metric-list">
-                  <div className="aeis-metric-row"><span>County accounts</span><strong>47 email-based workspaces</strong></div>
-                  <div className="aeis-metric-row"><span>SQL audit</span><strong>Login, GPS failure, logout</strong></div>
-                  <div className="aeis-metric-row"><span>Google SSO</span><strong>Provider-ready allow-list</strong></div>
-                </div>
-              </div>
-            </>
+            <AlertsPanel alerts={alertData} />
           )}
-          <AlertsPanel alerts={alertData} />
+          {selectedCounty && <AlertsPanel alerts={alertData} />}
         </div>
       </div>
     </>
@@ -286,8 +284,10 @@ export default function Dashboard() {
     ward: "",
   });
   const [dashboardData, setDashboardData] = useState(nationalSummary);
-  const [alertData, setAlertData] = useState(sampleAlerts);
-  const [reportData, setReportData] = useState(sampleReports);
+  const [alertData, setAlertData] = useState([]);
+  const [reportData, setReportData] = useState([]);
+  const [dashboardStatus, setDashboardStatus] = useState("loading");
+  const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -308,10 +308,11 @@ export default function Dashboard() {
           });
           if (response.ok) {
             const payload = await response.json();
+            const countyScopedRoles = ["county", "field_officer", "farmer"];
             const restored = {
               ...payload,
               auth_mode: payload.role,
-              lockedCounty: payload.role === "county" ? payload.county : "",
+              lockedCounty: countyScopedRoles.includes(payload.role) ? payload.county : "",
             };
             saveAuthSession(restored);
             if (!cancelled) setSession(restored);
@@ -337,7 +338,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!session) return;
 
-    if (session.role === "county") {
+    if (["county", "field_officer", "farmer"].includes(session.role)) {
       const county = getCountyByName(session.county);
       if (!county) return;
       setFilter({
@@ -345,51 +346,68 @@ export default function Dashboard() {
         subcounty: "",
         ward: "",
       });
-      setActivePage("county");
+      setActivePage(session.role === "farmer" ? "farmer" : "county");
       return;
     }
 
   }, [session]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadDashboardApi = useCallback(async () => {
+    if (!session?.token) return;
+    setDashboardStatus((current) => (current === "loading" ? "loading" : "refreshing"));
 
-    async function loadDashboardApi() {
+    const apiBase = getApiBase();
+    const requests = [
+      fetch(`${apiBase}/api/dashboard/summary`),
+      fetch(`${apiBase}/api/dashboard/alerts`, {
+        headers: { Authorization: `Bearer ${session.token}` },
+      }),
+      fetch(`${apiBase}/api/dashboard/reports`, {
+        headers: { Authorization: `Bearer ${session.token}` },
+      }),
+    ];
+
+    const results = await Promise.allSettled(requests);
+    let successfulSources = 0;
+    let newestTimestamp = null;
+
+    for (let index = 0; index < results.length; index += 1) {
+      const result = results[index];
+      if (result.status !== "fulfilled" || !result.value.ok) continue;
       try {
-        const apiBase = getApiBase();
-        const [summaryResponse, alertsResponse, reportsResponse] = await Promise.all([
-          fetch(`${apiBase}/api/dashboard/summary`),
-          fetch(`${apiBase}/api/dashboard/alerts`),
-          fetch(`${apiBase}/api/dashboard/reports`),
-        ]);
-
-        if (!summaryResponse.ok || !alertsResponse.ok || !reportsResponse.ok) return;
-
-        const [summary, alertsPayload, reportsPayload] = await Promise.all([
-          summaryResponse.json(),
-          alertsResponse.json(),
-          reportsResponse.json(),
-        ]);
-
-        if (!cancelled) {
-          setDashboardData(summary.summary || nationalSummary);
-          setAlertData(alertsPayload.alerts || sampleAlerts);
-          setReportData(reportsPayload.reports || sampleReports);
+        const payload = await result.value.json();
+        successfulSources += 1;
+        if (index === 0) {
+          setDashboardData(payload.summary || nationalSummary);
+          newestTimestamp = payload.generated_at || newestTimestamp;
+        } else if (index === 1) {
+          setAlertData(payload.alerts || []);
+          newestTimestamp = payload.generated_at || newestTimestamp;
+        } else {
+          setReportData(payload.reports || []);
+          newestTimestamp = payload.generated_at || newestTimestamp;
         }
       } catch (error) {
-        if (!cancelled) {
-          setDashboardData(nationalSummary);
-        }
+        // A malformed source is isolated so healthy dashboard sources still render.
       }
     }
 
-    loadDashboardApi();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (successfulSources === requests.length) setDashboardStatus("ready");
+    else if (successfulSources > 0) setDashboardStatus("partial");
+    else setDashboardStatus("error");
+    if (successfulSources > 0) setDashboardUpdatedAt(newestTimestamp || new Date().toISOString());
+  }, [session?.token]);
 
-  const lockedCounty = session?.role === "county" ? session.lockedCounty || session.county : "";
+  useEffect(() => {
+    if (!session?.token) return undefined;
+    loadDashboardApi();
+    const timer = window.setInterval(loadDashboardApi, 5 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [loadDashboardApi, session?.token]);
+
+  const lockedCounty = ["county", "field_officer", "farmer"].includes(session?.role)
+    ? session.lockedCounty || session.county
+    : "";
 
   const setScopedFilter = useMemo(() => {
     if (!lockedCounty) return setFilter;
@@ -410,6 +428,11 @@ export default function Dashboard() {
     setSession(null);
     setFilter({ county: "", subcounty: "", ward: "" });
     setActivePage("home");
+    setDashboardData(nationalSummary);
+    setAlertData([]);
+    setReportData([]);
+    setDashboardStatus("loading");
+    setDashboardUpdatedAt(null);
 
     if (current?.token) {
       try {
@@ -465,6 +488,7 @@ export default function Dashboard() {
     };
 
     if (activePage === "map") return <MapView {...sharedProps} />;
+    if (activePage === "intelligence") return <IntelligenceAssistant {...sharedProps} />;
     if (activePage === "county") return <CountyDashboard {...sharedProps} />;
     if (activePage === "farmer") return <FarmerDashboard {...sharedProps} />;
     if (activePage === "reports") return <Reports {...sharedProps} />;
@@ -477,7 +501,7 @@ export default function Dashboard() {
       );
     }
     if (activePage === "county-sites") return <CountySites {...sharedProps} />;
-    if (activePage === "admin" && session?.role !== "ministry") {
+    if (activePage === "admin" && !["ministry", "auditor"].includes(session?.role)) {
       return (
         <div className="aeis-card aeis-card-pad">
           <h1 className="aeis-section-title">Restricted Workspace</h1>
@@ -495,9 +519,27 @@ export default function Dashboard() {
         alertData={alertData}
         reportData={reportData}
         lockedCounty={lockedCounty}
+        session={session}
+        dataStatus={dashboardStatus}
+        updatedAt={dashboardUpdatedAt}
+        onRefresh={loadDashboardApi}
+        onNavigate={setActivePage}
       />
     );
-  }, [activePage, alertData, dashboardData, filter, handleOpenCountySite, lockedCounty, reportData, session, setScopedFilter]);
+  }, [
+    activePage,
+    alertData,
+    dashboardData,
+    dashboardStatus,
+    dashboardUpdatedAt,
+    filter,
+    handleOpenCountySite,
+    loadDashboardApi,
+    lockedCounty,
+    reportData,
+    session,
+    setScopedFilter,
+  ]);
 
   if (!authReady) {
     return (
@@ -517,17 +559,21 @@ export default function Dashboard() {
       onPageChange={setActivePage}
       session={session}
       onLogout={handleLogout}
-      counties={sampleCounties}
+      counties={kenyaCounties}
       selectedCounty={filter.county}
       lockedCounty={lockedCounty}
       onCountySelect={handleSidebarCountySelect}
     >
-      {activePage === "map" ? (
-        page
+      {["map", "intelligence", "reports", "admin", "county-sites"].includes(activePage) ? (
+        <Suspense fallback={<WorkspaceLoading />}>{page}</Suspense>
       ) : (
         <div className="aeis-workspace-grid">
-          <div className="aeis-workspace-main">{page}</div>
-          <PersistentMapPanel filter={filter} />
+          <div className="aeis-workspace-main">
+            <Suspense fallback={<WorkspaceLoading />}>{page}</Suspense>
+          </div>
+          <Suspense fallback={<WorkspaceLoading />}>
+            <PersistentMapPanel filter={filter} />
+          </Suspense>
         </div>
       )}
     </DashboardLayout>

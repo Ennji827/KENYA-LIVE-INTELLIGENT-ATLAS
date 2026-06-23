@@ -1,18 +1,22 @@
-﻿node_modules/
+node_modules/
 frontend/node_modules/
+frontend/dist/
 venv/
+.venv/
 .env
 __pycache__/
 *.pyc
 .DS_Store
 
+# AEIS-K runtime data
+.runtime/
+*.db
+*.db-*
+
 *.log
 frontend/vite.err.log
 frontend/vite.out.log
 
-backend/results/
-backend/data/uploads/
-backend/data/processed/
 
 *.tif
 *.tiff
@@ -26,5 +30,3 @@ frontend/src/*.backup
 frontend/src/*.backup.*
 frontend/public/data/*_1..geojson
 frontend/public/data/*_1..qmd
-frontend/dist/data/*_1..geojson
-frontend/dist/data/*_1..qmd

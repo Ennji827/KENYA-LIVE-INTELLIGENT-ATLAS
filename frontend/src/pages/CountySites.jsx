@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import StatCard from "../components/StatCard";
-import { sampleCounties } from "../data/sampleDashboardData";
+import { kenyaCounties } from "../data/kenyaCountyCatalog";
 
 function countyEmail(countyName) {
   const slug = countyName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "county";
@@ -17,8 +17,8 @@ export default function CountySites({ onOpenCounty }) {
 
   const visibleCounties = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return sampleCounties;
-    return sampleCounties.filter((county) => {
+    if (!needle) return kenyaCounties;
+    return kenyaCounties.filter((county) => {
       const values = [county.name, county.displayName, county.countyCode, countyEmail(county.name), sitePath(county)];
       return values.some((value) => value.toLowerCase().includes(needle));
     });
@@ -38,7 +38,7 @@ export default function CountySites({ onOpenCounty }) {
       </div>
 
       <div className="aeis-grid aeis-three-col">
-        <StatCard label="County Sites" value={sampleCounties.length} tone="green" />
+        <StatCard label="County Sites" value={kenyaCounties.length} tone="green" />
         <StatCard label="Analytics" value="Source required" note="Provider-backed only" tone="amber" />
         <StatCard label="Live Forecast" value="Below map" tone="blue" />
       </div>

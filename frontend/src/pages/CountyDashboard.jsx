@@ -8,9 +8,10 @@ import CountyIntelligenceBrief from "../components/CountyIntelligenceBrief";
 import DataAuthorityPanel from "../components/DataAuthorityPanel";
 import RealtimeOperationsFeed from "../components/RealtimeOperationsFeed";
 import StatCard from "../components/StatCard";
-import { getDashboardKpis, sampleCounties } from "../data/sampleDashboardData";
+import FieldReportsPanel from "../components/FieldReportsPanel";
+import { getDashboardKpis, kenyaCounties } from "../data/kenyaCountyCatalog";
 
-export default function CountyDashboard({ filter, setFilter, selectedCounty, lockedCounty }) {
+export default function CountyDashboard({ filter, setFilter, selectedCounty, lockedCounty, session }) {
   if (!selectedCounty) {
     return (
       <>
@@ -24,7 +25,7 @@ export default function CountyDashboard({ filter, setFilter, selectedCounty, loc
           </div>
           <div className="aeis-status-pill">National command center active</div>
         </div>
-        <CountyFilter counties={sampleCounties} value={filter} onChange={setFilter} lockedCounty={lockedCounty} />
+        <CountyFilter counties={kenyaCounties} value={filter} onChange={setFilter} lockedCounty={lockedCounty} />
       </>
     );
   }
@@ -45,7 +46,7 @@ export default function CountyDashboard({ filter, setFilter, selectedCounty, loc
         <div className="aeis-status-pill">{filter.subcounty || "All sub-counties"} / {filter.ward || "All wards"}</div>
       </div>
 
-      <CountyFilter counties={sampleCounties} value={filter} onChange={setFilter} lockedCounty={lockedCounty} />
+      <CountyFilter counties={kenyaCounties} value={filter} onChange={setFilter} lockedCounty={lockedCounty} />
       <div style={{ height: 16 }} />
 
       <div className="aeis-grid aeis-kpi-grid">
@@ -56,6 +57,13 @@ export default function CountyDashboard({ filter, setFilter, selectedCounty, loc
 
       <div style={{ height: 16 }} />
       <CountyIntelligenceBrief county={selectedCounty} />
+      <div style={{ height: 16 }} />
+      <FieldReportsPanel
+        session={session}
+        countyName={filter.county}
+        subcountyName={filter.subcounty}
+        wardName={filter.ward}
+      />
       <div style={{ height: 16 }} />
 
       <div className="aeis-grid aeis-two-col">

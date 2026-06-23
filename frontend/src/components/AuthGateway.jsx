@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getApiBase } from "../utils/api";
-import { sampleCounties } from "../data/sampleDashboardData";
+import { kenyaCounties } from "../data/kenyaCountyCatalog";
+import KsaPoweredBy from "./KsaPoweredBy";
 
 const STORAGE_KEY = "aeis_auth_session";
 
@@ -159,7 +160,7 @@ export default function AuthGateway({ onAuthenticated }) {
   }, [selectedNationalProfile]);
 
   const selectedCounty = useMemo(
-    () => sampleCounties.find((item) => item.name === county) || null,
+    () => kenyaCounties.find((item) => item.name === county) || null,
     [county]
   );
   const selectedCredentials = useMemo(() => credentialsForCounty(county, accounts), [accounts, county]);
@@ -288,6 +289,7 @@ export default function AuthGateway({ onAuthenticated }) {
           <div className="aeis-kicker">AEIS-K secure entry</div>
           <h1>AEIS-K Intelligence Dashboard</h1>
           <p>Agro-Environmental Intelligence System for Kenya</p>
+          <KsaPoweredBy variant="auth" />
         </div>
 
         <div className="aeis-auth-tabs">
@@ -305,7 +307,7 @@ export default function AuthGateway({ onAuthenticated }) {
               <label htmlFor="aeis-login-county">County</label>
               <select id="aeis-login-county" value={county} onChange={(event) => setCounty(event.target.value)}>
                 <option value="">Select county</option>
-                {sampleCounties.map((item) => (
+                {kenyaCounties.map((item) => (
                   <option key={item.name} value={item.name}>
                     {item.displayName}
                   </option>
@@ -442,7 +444,7 @@ export default function AuthGateway({ onAuthenticated }) {
               <div>
                 <strong>{selectedNationalProfile.command_center}</strong>
                 <p>
-                  Scope: {selectedNationalProfile.boundary_scope}. National access is token-based and recorded in the SQLite audit log.
+                  Scope: {selectedNationalProfile.boundary_scope}. National access is token-based and recorded in the Django audit log.
                 </p>
               </div>
             </div>
