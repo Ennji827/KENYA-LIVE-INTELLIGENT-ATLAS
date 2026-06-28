@@ -70,11 +70,25 @@ ROLE_PERMISSIONS = {
         "data_quality_read",
         "system_health_read",
     ],
+    AEISUser.Role.PUBLIC: [
+        "intelligence_use_limited",
+        "weather_read",
+        "report_read",
+    ],
 }
 
 
 def slugify(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "county"
+
+
+def _make_username(email: str) -> str:
+    base = re.sub(r"[^a-z0-9]+", "_", email.split("@")[0].lower()).strip("_") or "user"
+    username, counter = base, 1
+    while AEISUser.objects.filter(username=username).exists():
+        username = f"{base}_{counter}"
+        counter += 1
+    return username
 
 
 def county_email(name: str) -> str:
@@ -154,6 +168,27 @@ def _remaining_seconds(expires_at) -> int:
 
 def session_payload(session: AccessSession) -> dict:
     user = session.user
+    full_name = f"{user.first_name} {user.last_name}".strip() or user.username
+
+    if user.role == AEISUser.Role.PUBLIC:
+        return {
+            "token": session.token,
+            "role": user.role,
+            "position": user.position,
+            "full_name": full_name,
+            "county": "",
+            "county_code": "",
+            "username": user.username,
+            "email": user.email,
+            "provider": session.provider,
+            "command_center": "AEIS-K Public Portal",
+            "gps_status": "not_required",
+            "boundary_scope": "public_read",
+            "permissions": ROLE_PERMISSIONS.get(user.role, []),
+            "expires_at": session.expires_at.isoformat(),
+            "expires_in_seconds": _remaining_seconds(session.expires_at),
+        }
+
     profile = _profile(user)
     if profile:
         return {
@@ -523,6 +558,122 @@ def access_model_payload() -> dict:
         "county_account_count": len(county_accounts),
         "audit": {"enabled": True, "events": ["login", "logout", "invalid_credentials", "outside_county_geofence"]},
     }
+
+
+def register_user(payload: dict) -> tuple[int, dict]:
+    first_name = str(payload.get("first_name") or "").strip()
+    last_name = str(payload.get("last_name") or "").strip()
+    email = str(payload.get("email") or "").strip().lower()
+    password = str(payload.get("password") or "")
+    position = str(payload.get("position") or "").strip()
+
+    if not first_name or not email or not password:
+        return 400, {"error": "first_name, email, and password are required"}
+    if len(password) < 8:
+        return 400, {"error": "Password must be at least 8 characters"}
+    valid_positions = [p[0] for p in AEISUser.Position.choices]
+    if position not in valid_positions:
+        return 400, {"error": f"position must be one of: {', '.join(valid_positions)}"}
+    if AEISUser.objects.filter(email__iexact=email).exists():
+        return 409, {"error": "An account with this email already exists"}
+
+    username = _make_username(email)
+    user = AEISUser(
+        username=username,
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        role=AEISUser.Role.PUBLIC,
+        position=position,
+        provider="password",
+        is_active=True,
+    )
+    user.set_password(password)
+    user.save()
+    session = _create_session(user, "password", 0, 0)
+    _audit("register", "success", payload, email=email, username=username, role="public", provider="password")
+    return 201, session_payload(session)
+
+
+def authenticate_public_login(payload: dict) -> tuple[int, dict]:
+    email = str(payload.get("email") or "").strip()
+    password = str(payload.get("password") or "")
+
+    if not email or not password:
+        return 400, {"error": "email and password are required"}
+
+    user = _find_user(email, [AEISUser.Role.PUBLIC])
+    if not user or not user.check_password(password):
+        _audit("login", "failed", payload, email=email, role="public", provider="password", reason="invalid_credentials")
+        return 401, {"error": "Invalid email or password"}
+
+    session = _create_session(user, "password", 0, 0)
+    _audit("login", "success", payload, email=user.email, username=user.username, role=user.role, provider="password")
+    return 200, session_payload(session)
+
+
+def authenticate_google_login(payload: dict) -> tuple[int, dict]:
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    id_token = str(payload.get("id_token") or "").strip()
+    position = str(payload.get("position") or "").strip()
+
+    if not id_token:
+        return 400, {"error": "Google id_token is required"}
+
+    try:
+        url = f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}"
+        with urllib.request.urlopen(url, timeout=8) as resp:
+            google_data = _json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        try:
+            body = _json.loads(exc.read())
+            return 401, {"error": body.get("error_description", "Invalid Google token")}
+        except Exception:
+            return 401, {"error": "Invalid Google token"}
+    except Exception as exc:
+        return 401, {"error": f"Google token verification failed: {exc}"}
+
+    if "error" in google_data:
+        return 401, {"error": "Invalid Google token"}
+
+    email = google_data.get("email", "").lower()
+    if not email or not google_data.get("email_verified"):
+        return 401, {"error": "Google account email is not verified"}
+
+    first_name = google_data.get("given_name", "")
+    last_name = google_data.get("family_name", "")
+
+    user = AEISUser.objects.filter(email__iexact=email).first()
+    if user:
+        staff_roles = {AEISUser.Role.MINISTRY, AEISUser.Role.COUNTY, AEISUser.Role.ANALYST, AEISUser.Role.AUDITOR, AEISUser.Role.FIELD_OFFICER}
+        if user.role in staff_roles:
+            return 403, {"error": "Staff accounts cannot sign in with Google. Use your assigned credentials."}
+        if not user.is_active:
+            return 403, {"error": "Your account has been deactivated"}
+    else:
+        valid_positions = [p[0] for p in AEISUser.Position.choices]
+        if position not in valid_positions:
+            position = ""
+        username = _make_username(email)
+        user = AEISUser(
+            username=username,
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            role=AEISUser.Role.PUBLIC,
+            position=position,
+            provider="google",
+            is_active=True,
+        )
+        user.set_unusable_password()
+        user.save()
+
+    session = _create_session(user, "google", 0, 0)
+    _audit("login", "success", payload, email=user.email, username=user.username, role=user.role, provider="google")
+    return 200, session_payload(session)
 
 
 def audit_log(limit: int = 80) -> list[dict]:

@@ -14,11 +14,19 @@ class AEISUser(AbstractUser):
         FIELD_OFFICER = "field_officer", "Field officer"
         FARMER = "farmer", "Farmer / user"
         AUDITOR = "auditor", "Auditor"
+        PUBLIC = "public", "Public user"
+
+    class Position(models.TextChoices):
+        STUDENT = "student", "Student"
+        INDUSTRY_PROFESSIONAL = "industry_professional", "Industry Professional"
+        RESEARCHER = "researcher", "Researcher"
+        DECISION_MAKER = "decision_maker", "Decision Maker"
 
     email = models.EmailField(unique=True)
     county_code = models.CharField(max_length=8, blank=True)
     county_name = models.CharField(max_length=100, blank=True)
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.COUNTY, db_index=True)
+    position = models.CharField(max_length=32, choices=Position.choices, blank=True, default="")
     provider = models.CharField(max_length=32, default="password")
 
     def __str__(self) -> str:

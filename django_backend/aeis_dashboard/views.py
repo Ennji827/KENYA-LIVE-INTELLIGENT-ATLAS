@@ -487,6 +487,45 @@ def auth_logout(request: HttpRequest) -> JsonResponse:
     return api_json(result, status=status)
 
 
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def auth_register(request: HttpRequest) -> JsonResponse:
+    if request.method == "OPTIONS":
+        return api_json({"status": "ok"})
+    status, result = auth.register_user(request_json(request))
+    return api_json(result, status=status)
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def auth_public_login(request: HttpRequest) -> JsonResponse:
+    if request.method == "OPTIONS":
+        return api_json({"status": "ok"})
+    status, result = auth.authenticate_public_login(request_json(request))
+    return api_json(result, status=status)
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def auth_google_login(request: HttpRequest) -> JsonResponse:
+    if request.method == "OPTIONS":
+        return api_json({"status": "ok"})
+    status, result = auth.authenticate_google_login(request_json(request))
+    return api_json(result, status=status)
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def auth_forgot_password(request: HttpRequest) -> JsonResponse:
+    if request.method == "OPTIONS":
+        return api_json({"status": "ok"})
+    email = str(request_json(request).get("email") or "").strip().lower()
+    if not email:
+        return api_json({"error": "email is required"}, status=400)
+    # Always return success — avoids email enumeration
+    return api_json({"status": "ok", "message": "If that email is registered you will receive a reset link shortly."})
+
+
 def user_payload(user: AEISUser) -> dict:
     return {
         "id": user.pk,
