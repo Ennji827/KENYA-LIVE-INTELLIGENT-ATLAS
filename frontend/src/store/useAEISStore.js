@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import * as turf from "@turf/turf";
 import { getApiBase } from "../utils/api";
+import { countyName, subCountyName, wardName } from "../utils/boundaries";
 
 async function fetchGeoJSON(paths) {
   const candidates = Array.isArray(paths) ? paths : [paths];
@@ -19,6 +20,18 @@ async function fetchGeoJSON(paths) {
   }
 
   throw lastError || new Error("GeoJSON request failed");
+}
+
+function hasUsableGeometry(feature) {
+  return Boolean(feature?.geometry?.type && feature.geometry.coordinates);
+}
+
+function sanitizeFeatureCollection(collection, getName) {
+  if (!collection?.features) return collection;
+  return {
+    ...collection,
+    features: collection.features.filter((feature) => hasUsableGeometry(feature) && Boolean(getName(feature))),
+  };
 }
 
 function bboxContainsPoint(bounds, point) {
@@ -147,11 +160,14 @@ const useAEISStore = create((set, get) => ({
         fetchGeoJSON(["/data/sub_Counties.geojson", "/data/sub_counties.geojson"]),
         fetchGeoJSON("/data/wards.geojson"),
       ]);
-      const wardData = enrichWardsWithParents(rawWardData, subcountyData);
+      const cleanCountyData = sanitizeFeatureCollection(countyData, countyName);
+      const cleanSubcountyData = sanitizeFeatureCollection(subcountyData, subCountyName);
+      const cleanRawWardData = sanitizeFeatureCollection(rawWardData, wardName);
+      const wardData = enrichWardsWithParents(cleanRawWardData, cleanSubcountyData);
 
       set({
-        counties: countyData,
-        subcounties: subcountyData,
+        counties: cleanCountyData,
+        subcounties: cleanSubcountyData,
         wards: wardData,
         loadingGeoJSON: false,
         geoJSONError: null,

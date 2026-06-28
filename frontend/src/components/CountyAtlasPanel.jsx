@@ -11,15 +11,14 @@ import {
   Waves,
   X,
 } from "lucide-react";
-
-function featureName(feature, property) {
-  return feature?.properties?.[property] || "";
-}
-
-function countyNumber(feature) {
-  const digits = String(feature?.properties?.ADM1_PCODE || "").replace(/\D/g, "");
-  return digits ? String(Number(digits)).padStart(3, "0") : "---";
-}
+import {
+  countyName as boundaryCountyName,
+  countyNumber,
+  sameCounty,
+  sameSubCounty,
+  subCountyName as boundarySubCountyName,
+  wardName as boundaryWardName,
+} from "../utils/boundaries";
 
 function countyArea(feature) {
   if (!feature) return null;
@@ -63,18 +62,18 @@ export default function CountyAtlasPanel({
   const [subcountyQuery, setSubcountyQuery] = useState("");
   const [wardQuery, setWardQuery] = useState("");
 
-  const countyName = featureName(selectedCounty, "ADM1_EN");
-  const subcountyName = featureName(selectedSubCounty, "ADM2_EN");
-  const wardName = featureName(selectedWard, "shapeName") || featureName(selectedWard, "ADM3_EN");
+  const countyName = boundaryCountyName(selectedCounty);
+  const subcountyName = boundarySubCountyName(selectedSubCounty);
+  const wardName = boundaryWardName(selectedWard);
   const area = countyArea(selectedCounty);
 
   const countyOptions = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return [...(counties?.features || [])]
       .filter((feature) => {
-        if (lockedCounty && featureName(feature, "ADM1_EN") !== lockedCounty) return false;
+        if (lockedCounty && !sameCounty(feature, { properties: { ADM1_EN: lockedCounty } })) return false;
         if (!normalized) return true;
-        const name = featureName(feature, "ADM1_EN").toLowerCase();
+        const name = boundaryCountyName(feature).toLowerCase();
         return name.includes(normalized) || countyNumber(feature).includes(normalized);
       })
       .sort((a, b) => Number(countyNumber(a)) - Number(countyNumber(b)))
@@ -84,42 +83,38 @@ export default function CountyAtlasPanel({
   const countySubcounties = useMemo(() => {
     if (!countyName) return [];
     return (subcounties?.features || [])
-      .filter((feature) => featureName(feature, "ADM1_EN") === countyName)
-      .sort((a, b) => featureName(a, "ADM2_EN").localeCompare(featureName(b, "ADM2_EN")));
-  }, [countyName, subcounties]);
+      .filter((feature) => sameCounty(feature, selectedCounty))
+      .sort((a, b) => boundarySubCountyName(a).localeCompare(boundarySubCountyName(b)));
+  }, [countyName, selectedCounty, subcounties]);
 
   const visibleSubcounties = useMemo(() => {
     const normalized = subcountyQuery.trim().toLowerCase();
     if (!normalized) return countySubcounties;
     return countySubcounties.filter((feature) =>
-      featureName(feature, "ADM2_EN").toLowerCase().includes(normalized)
+      boundarySubCountyName(feature).toLowerCase().includes(normalized)
     );
   }, [countySubcounties, subcountyQuery]);
 
   const allCountyWards = useMemo(() => {
     if (!countyName) return [];
-    return (wards?.features || []).filter((feature) => {
-      const properties = feature.properties || {};
-      if (properties.ADM1_EN && properties.ADM1_EN !== countyName) return false;
-      return properties.ADM1_EN === countyName;
-    });
-  }, [countyName, wards]);
+    return (wards?.features || []).filter((feature) => sameCounty(feature, selectedCounty));
+  }, [countyName, selectedCounty, wards]);
 
   const countyWards = useMemo(() => {
     if (!subcountyName) return allCountyWards;
-    return allCountyWards.filter((feature) => featureName(feature, "ADM2_EN") === subcountyName);
-  }, [allCountyWards, subcountyName]);
+    return allCountyWards.filter((feature) => sameSubCounty(feature, selectedSubCounty));
+  }, [allCountyWards, selectedSubCounty, subcountyName]);
 
   const visibleWards = useMemo(() => {
     const normalized = wardQuery.trim().toLowerCase();
     return countyWards
       .filter((feature) => {
-        const name = featureName(feature, "shapeName") || featureName(feature, "ADM3_EN");
+        const name = boundaryWardName(feature);
         return !normalized || name.toLowerCase().includes(normalized);
       })
       .sort((a, b) => {
-        const nameA = featureName(a, "shapeName") || featureName(a, "ADM3_EN");
-        const nameB = featureName(b, "shapeName") || featureName(b, "ADM3_EN");
+        const nameA = boundaryWardName(a);
+        const nameB = boundaryWardName(b);
         return nameA.localeCompare(nameB);
       });
   }, [countyWards, wardQuery]);
@@ -162,7 +157,7 @@ export default function CountyAtlasPanel({
             {countyOptions.map((feature) => (
               <button type="button" key={feature.properties?.ADM1_PCODE} onClick={() => onCountySelect(feature)}>
                 <span>{countyNumber(feature)}</span>
-                <strong>{featureName(feature, "ADM1_EN")}</strong>
+                <strong>{boundaryCountyName(feature)}</strong>
               </button>
             ))}
           </div>
@@ -192,7 +187,7 @@ export default function CountyAtlasPanel({
             </div>
             <div className="aeis-atlas-name-grid">
               {visibleSubcounties.map((feature) => {
-                const name = featureName(feature, "ADM2_EN");
+                const name = boundarySubCountyName(feature);
                 return (
                   <button
                     type="button"
@@ -224,7 +219,7 @@ export default function CountyAtlasPanel({
               </div>
               <div className="aeis-atlas-name-grid">
                 {visibleWards.map((feature) => {
-                  const name = featureName(feature, "shapeName") || featureName(feature, "ADM3_EN");
+                  const name = boundaryWardName(feature);
                   return (
                     <button
                       type="button"

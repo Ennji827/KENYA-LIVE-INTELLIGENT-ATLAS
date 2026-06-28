@@ -24,7 +24,7 @@ function Section({ title, items, tone = "" }) {
   );
 }
 
-export default function IntelligenceAssistant({ session, filter }) {
+export default function IntelligenceAssistant({ session, filter, initialQuestion = "" }) {
   const [status, setStatus] = useState(null);
   const [question, setQuestion] = useState("");
   const [scopeLevel, setScopeLevel] = useState(
@@ -38,6 +38,10 @@ export default function IntelligenceAssistant({ session, filter }) {
   const [message, setMessage] = useState("Ask a source-grounded question about agriculture, climate, GIS, or field operations.");
 
   const headers = { Authorization: `Bearer ${session.token}` };
+
+  useEffect(() => {
+    if (initialQuestion) setQuestion(initialQuestion);
+  }, [initialQuestion]);
 
   useEffect(() => {
     let cancelled = false;

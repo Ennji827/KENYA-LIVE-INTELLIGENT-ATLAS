@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useState, useRef } from "react";
-import { MapContainer, TileLayer, WMSTileLayer, useMap, ScaleControl, useMapEvents } from "react-leaflet";
+import { MapContainer, Pane, TileLayer, WMSTileLayer, useMap, ScaleControl, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
@@ -18,6 +18,14 @@ import SubCountyLayer from "./SubCountyLayer";
 import WardLayer from "./WardLayer";
 import SegmentationLayer from "./SegmentationLayer";
 import { getApiBase } from "../../utils/api";
+import {
+  countyName,
+  sameCounty,
+  sameSubCounty,
+  subCountyCode,
+  wardCode,
+  wardName,
+} from "../../utils/boundaries";
 
 window.L = L;
 delete L.Icon.Default.prototype._getIconUrl;
@@ -49,29 +57,59 @@ const baseMaps = {
   },
 };
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function formatIsoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function safeDailyGibsDate(lagDays) {
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() - lagDays);
+  return formatIsoDate(date);
+}
+
+function safeModis8DayDate(lagDays = 4) {
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() - lagDays);
+
+  const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
+  const offset = Math.max(0, Math.floor((date.getTime() - yearStart) / DAY_MS));
+  const cycleOffset = Math.floor(offset / 8) * 8;
+  return formatIsoDate(new Date(yearStart + cycleOffset * DAY_MS));
+}
+
+const latestGibsDates = {
+  trueColor: safeDailyGibsDate(2),
+  ndvi: safeModis8DayDate(4),
+  lst: safeDailyGibsDate(3),
+};
+
 const realImageryLayers = {
   nasaTrueColor: {
     label: "NASA MODIS true color",
-    date: "2026-06-14",
+    date: latestGibsDates.trueColor,
     opacity: 0.82,
     maxNativeZoom: 9,
-    url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/2026-06-14/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpeg",
+    url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${latestGibsDates.trueColor}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpeg`,
     attribution: "NASA GIBS",
   },
   nasaNdvi: {
     label: "NASA MODIS NDVI 8-day",
-    date: "2026-06-13",
+    date: latestGibsDates.ndvi,
     opacity: 0.72,
     maxNativeZoom: 9,
-    url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_NDVI_8Day/default/2026-06-13/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png",
+    url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_NDVI_8Day/default/${latestGibsDates.ndvi}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`,
     attribution: "NASA GIBS",
   },
   nasaLst: {
     label: "NASA MODIS LST day",
-    date: "2026-06-14",
+    date: latestGibsDates.lst,
     opacity: 0.68,
     maxNativeZoom: 7,
-    url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Land_Surface_Temp_Day/default/2026-06-14/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png",
+    url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Land_Surface_Temp_Day/default/${latestGibsDates.lst}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
     attribution: "NASA GIBS",
   },
 };
@@ -174,7 +212,11 @@ export default function LiveMap({
     .filter(Boolean);
   const activeConfiguredGeeLayers = activeGeeLayers.filter((layer) => layer.configured && layer.tile_url);
   const activeMissingGeeLayers = activeGeeLayers.filter((layer) => !layer.configured || !layer.tile_url);
-  const selectedCountyName = selectedCounty?.properties?.ADM1_EN || "";
+  const selectedCountyName = countyName(selectedCounty);
+  const accessCountyFeature = React.useMemo(
+    () => (accessCountyName ? { properties: { ADM1_EN: accessCountyName } } : null),
+    [accessCountyName]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -257,25 +299,25 @@ export default function LiveMap({
     if (!counties || !accessCountyName) return counties;
     return {
       ...counties,
-      features: counties.features.filter((feature) => feature.properties?.ADM1_EN === accessCountyName),
+      features: counties.features.filter((feature) => sameCounty(feature, accessCountyFeature)),
     };
-  }, [counties, accessCountyName]);
+  }, [accessCountyFeature, accessCountyName, counties]);
 
   const visibleSubcounties = React.useMemo(() => {
     if (!subcounties || !accessCountyName) return subcounties;
     return {
       ...subcounties,
-      features: subcounties.features.filter((feature) => feature.properties?.ADM1_EN === accessCountyName),
+      features: subcounties.features.filter((feature) => sameCounty(feature, accessCountyFeature)),
     };
-  }, [subcounties, accessCountyName]);
+  }, [accessCountyFeature, accessCountyName, subcounties]);
 
   const accessibleWards = React.useMemo(() => {
     if (!wards || !accessCountyName) return wards;
     return {
       ...wards,
-      features: wards.features.filter((feature) => feature.properties?.ADM1_EN === accessCountyName),
+      features: wards.features.filter((feature) => sameCounty(feature, accessCountyFeature)),
     };
-  }, [wards, accessCountyName]);
+  }, [accessCountyFeature, accessCountyName, wards]);
 
   const zoomTo = useCallback(
     (feature, opts = {}) => {
@@ -333,49 +375,46 @@ export default function LiveMap({
     if (onMapReady) onMapReady(mapInstance);
   }, [onMapReady]);
 
+  useEffect(() => {
+    if (!map) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      map.invalidateSize();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [map, mapHeight]);
+
   // Helper: Find subcounties inside a county (memoized for performance)
   const linkedSubcounties = React.useMemo(() => {
     if (!visibleSubcounties || !selectedCounty) return [];
-    const countyName = (selectedCounty.properties?.ADM1_EN || selectedCounty.properties?.NAME || "").toLowerCase();
-    
-    return visibleSubcounties.features.filter(sub => {
-      try {
-        const parent = (sub.properties?.ADM1_EN || sub.properties?.County || sub.properties?.NAME_1 || sub.properties?.NAME || "").toLowerCase();
-        const target = (countyName || "").toLowerCase();
-        if (!target || !parent) return false;
-        return parent.toLowerCase().includes(countyName.toLowerCase()) || 
-               countyName.toLowerCase().includes(parent.toLowerCase());
-      } catch(e) { return false; }
-    });
+    return visibleSubcounties.features.filter((feature) => sameCounty(feature, selectedCounty));
   }, [visibleSubcounties, selectedCounty]);
+
+  const countyWards = React.useMemo(() => {
+    if (!accessibleWards || !selectedCounty) return [];
+    return accessibleWards.features.filter((feature) => sameCounty(feature, selectedCounty));
+  }, [accessibleWards, selectedCounty]);
 
   // Helper: Find wards inside a subcounty (memoized for performance)
   const linkedWards = React.useMemo(() => {
     if (!accessibleWards || !selectedSubCounty) return [];
-    const subcountyFeature = selectedSubCounty;
-    const subcountyName = (subcountyFeature.properties?.ADM2_EN || subcountyFeature.properties?.NAME || "").toLowerCase();
-
-    return accessibleWards.features.filter(ward => {
-      try {
-        const parent = (ward.properties?.ADM2_EN || ward.properties?.SubCounty || ward.properties?.NAME_2 || "").toLowerCase();
-        if (!subcountyName || !parent) return false;
-        // Robust fuzzy matching for varying administrative name conventions
-        return parent.toLowerCase().includes(subcountyName.toLowerCase()) || 
-               subcountyName.toLowerCase().includes(parent.toLowerCase()) ||
-               ward.properties?.ADM2_PCODE === subcountyFeature.properties?.ADM2_PCODE;
-      } catch(e) { return false; }
-    });
-  }, [accessibleWards, selectedSubCounty]);
+    const source = selectedCounty ? countyWards : accessibleWards.features;
+    return source.filter((feature) => sameSubCounty(feature, selectedSubCounty));
+  }, [accessibleWards, countyWards, selectedCounty, selectedSubCounty]);
 
   const visibleWards = React.useMemo(() => {
     if (!accessibleWards) return null;
-    if (!selectedSubCounty) return accessibleWards;
-
+    if (!selectedCounty) return null;
+    if (!selectedSubCounty) {
+      return {
+        ...accessibleWards,
+        features: countyWards,
+      };
+    }
     return {
       ...accessibleWards,
       features: linkedWards,
     };
-  }, [accessibleWards, selectedSubCounty, linkedWards]);
+  }, [accessibleWards, countyWards, linkedWards, selectedCounty, selectedSubCounty]);
 
   const linkedSubcountyData = React.useMemo(() => {
     if (!visibleSubcounties || !selectedCounty) return null;
@@ -606,57 +645,61 @@ export default function LiveMap({
           </div>
         )}
 
-        {visibleCounties && (layers?.counties ?? true) && (
-          <CountyLayer
-            key={`counties-${selectedCounty?.properties?.ADM1_PCODE || "all"}`}
-            data={visibleCounties}
-            selectedCounty={selectedCounty}
-            onSelect={(f) => {
-              hoverAutoSelectRef.current = false;
-              setSelectedCounty(f);
-              setSelectedSubCounty(null);
-              setSelectedWard(null);
-              onCountySelect?.(f);
-              zoomTo(f);
-            }}
-            onHover={(f) => {
-              setHoveredCounty(f);
-              if (!hoverSelectEnabled) return;
-              if (accessCountyName) return;
-
-              hoverAutoSelectRef.current = true;
-              if (f) {
+        <Pane name="aeis-counties-pane" style={{ zIndex: 410 }}>
+          {visibleCounties && (layers?.counties ?? true) && (
+            <CountyLayer
+              key={`counties-${selectedCounty?.properties?.ADM1_PCODE || "all"}`}
+              data={visibleCounties}
+              selectedCounty={selectedCounty}
+              onSelect={(f) => {
+                hoverAutoSelectRef.current = false;
                 setSelectedCounty(f);
                 setSelectedSubCounty(null);
                 setSelectedWard(null);
-              } else {
-                setSelectedCounty(null);
-                setSelectedSubCounty(null);
-                setSelectedWard(null);
-              }
-            }}
-          />
-        )}
+                onCountySelect?.(f);
+                zoomTo(f);
+              }}
+              onHover={(f) => {
+                setHoveredCounty(f);
+                if (!hoverSelectEnabled) return;
+                if (accessCountyName) return;
+
+                hoverAutoSelectRef.current = true;
+                if (f) {
+                  setSelectedCounty(f);
+                  setSelectedSubCounty(null);
+                  setSelectedWard(null);
+                } else {
+                  setSelectedCounty(null);
+                  setSelectedSubCounty(null);
+                  setSelectedWard(null);
+                }
+              }}
+            />
+          )}
+        </Pane>
         {countyLabelData && (layers?.counties ?? true) && (
           <CountyCodeLabels data={countyLabelData} visible showNames={Boolean(selectedCounty)} />
         )}
 
-        {visibleSubcounties && (layers?.subcounties) && (
-          <SubCountyLayer
-            key={`subcounties-${selectedCounty?.properties?.ADM1_PCODE || "none"}-${selectedSubCounty?.properties?.ADM2_PCODE || "all"}`}
-            data={visibleSubcounties}
-            selectedCounty={selectedCounty}
-            selectedSubCounty={selectedSubCounty}
-            onSelect={(f) => {
-              hoverAutoSelectRef.current = false;
-              setSelectedSubCounty(f);
-              setSelectedWard(null);
-              onSubCountySelect?.(f);
-              zoomTo(f);
-            }}
-            onHover={(f) => setHoveredSubCounty(f)}
-          />
-        )}
+        <Pane name="aeis-subcounties-pane" style={{ zIndex: 430 }}>
+          {linkedSubcountyData && (layers?.subcounties) && selectedCounty && (
+            <SubCountyLayer
+              key={`subcounties-${selectedCountyName || "none"}-${subCountyCode(selectedSubCounty) || "all"}`}
+              data={linkedSubcountyData}
+              selectedCounty={selectedCounty}
+              selectedSubCounty={selectedSubCounty}
+              onSelect={(f) => {
+                hoverAutoSelectRef.current = false;
+                setSelectedSubCounty(f);
+                setSelectedWard(null);
+                onSubCountySelect?.(f);
+                zoomTo(f);
+              }}
+              onHover={(f) => setHoveredSubCounty(f)}
+            />
+          )}
+        </Pane>
         {linkedSubcountyData && layers?.subcounties && (
           <BoundaryLabels
             data={linkedSubcountyData}
@@ -667,22 +710,24 @@ export default function LiveMap({
           />
         )}
 
-        {visibleWards && (layers?.wards) && (selectedSubCounty || currentZoom >= 10 || selectedWard) && (
-          <WardLayer
-            key={`wards-${selectedSubCounty?.properties?.ADM2_PCODE || "all"}-${selectedWard?.properties?.shapeID || selectedWard?.properties?.shapeName || "none"}`}
-            data={visibleWards}
-            selectedCounty={selectedCounty}
-            selectedSubCounty={selectedSubCounty}
-            selectedWard={selectedWard}
-            onSelect={(f) => {
-              hoverAutoSelectRef.current = false;
-              setSelectedWard(f);
-              onWardSelect?.(f);
-              zoomTo(f);
-            }}
-            onHover={(f) => setHoveredWard(f)}
-          />
-        )}
+        <Pane name="aeis-wards-pane" style={{ zIndex: 450 }}>
+          {visibleWards && (layers?.wards) && selectedCounty && (selectedSubCounty || currentZoom >= 10 || selectedWard) && (
+            <WardLayer
+              key={`wards-${subCountyCode(selectedSubCounty) || "county"}-${wardCode(selectedWard) || wardName(selectedWard) || "none"}`}
+              data={visibleWards}
+              selectedCounty={selectedCounty}
+              selectedSubCounty={selectedSubCounty}
+              selectedWard={selectedWard}
+              onSelect={(f) => {
+                hoverAutoSelectRef.current = false;
+                setSelectedWard(f);
+                onWardSelect?.(f);
+                zoomTo(f);
+              }}
+              onHover={(f) => setHoveredWard(f)}
+            />
+          )}
+        </Pane>
         {linkedWardData && layers?.wards && selectedSubCounty && (
           <BoundaryLabels
             data={linkedWardData}

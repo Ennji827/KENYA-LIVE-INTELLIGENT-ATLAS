@@ -38,6 +38,7 @@ const AdminPanel = lazy(() => import("./AdminPanel"));
 const CountySites = lazy(() => import("./CountySites"));
 const PersistentMapPanel = lazy(() => import("../components/PersistentMapPanel"));
 const LiveWeatherForecastPanel = lazy(() => import("../components/LiveWeatherForecastPanel"));
+const ClimateInsightStudio = lazy(() => import("../components/ClimateInsightStudio"));
 
 function WorkspaceLoading() {
   return (
@@ -188,6 +189,7 @@ function DashboardHome({
   updatedAt,
   onRefresh,
   onNavigate,
+  onAskAssistant,
 }) {
   const [activeInsight, setActiveInsight] = useState("farmers");
   const selectedCounty = getCountyByName(filter.county);
@@ -236,6 +238,15 @@ function DashboardHome({
       <CountyFilter counties={kenyaCounties} value={filter} onChange={setFilter} lockedCounty={lockedCounty} />
 
       <div style={{ height: 16 }} />
+      <Suspense fallback={<WorkspaceLoading />}>
+        <ClimateInsightStudio
+          session={session}
+          county={selectedCounty}
+          onOpenAssistant={onAskAssistant}
+        />
+      </Suspense>
+
+      <div style={{ height: 16 }} />
       <div className="aeis-grid aeis-two-col">
         <div className="aeis-grid">
           {selectedCounty ? (
@@ -260,9 +271,14 @@ function DashboardHome({
           {selectedCounty ? (
             <>
               <RemoteSensingImageryPanel county={selectedCounty} />
-              <DataAuthorityPanel county={selectedCounty} />
-              <CropHealthPanel stats={stats} title={`${filter.county} Crop Health`} />
-              <FertilizerPanel stats={stats} countyName={filter.county} />
+              <details className="aeis-secondary-details">
+                <summary>Advanced source gates and planning tools</summary>
+                <div className="aeis-grid aeis-secondary-details-body">
+                  <DataAuthorityPanel county={selectedCounty} />
+                  <CropHealthPanel stats={stats} title={`${filter.county} Crop Health`} />
+                  <FertilizerPanel stats={stats} countyName={filter.county} />
+                </div>
+              </details>
             </>
           ) : (
             <AlertsPanel alerts={alertData} />
@@ -288,6 +304,7 @@ export default function Dashboard() {
   const [reportData, setReportData] = useState([]);
   const [dashboardStatus, setDashboardStatus] = useState("loading");
   const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState(null);
+  const [assistantDraft, setAssistantDraft] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -474,6 +491,11 @@ export default function Dashboard() {
     setActivePage("county");
   }, []);
 
+  const handleAskAssistant = useCallback((prompt) => {
+    setAssistantDraft(prompt || "");
+    setActivePage("intelligence");
+  }, []);
+
   const page = useMemo(() => {
     const selectedCounty = getCountyByName(filter.county);
     const sharedProps = {
@@ -485,6 +507,7 @@ export default function Dashboard() {
       lockedCounty,
       session,
       onOpenCounty: handleOpenCountySite,
+      initialQuestion: assistantDraft,
     };
 
     if (activePage === "map") return <MapView {...sharedProps} />;
@@ -524,6 +547,7 @@ export default function Dashboard() {
         updatedAt={dashboardUpdatedAt}
         onRefresh={loadDashboardApi}
         onNavigate={setActivePage}
+        onAskAssistant={handleAskAssistant}
       />
     );
   }, [
@@ -534,6 +558,8 @@ export default function Dashboard() {
     dashboardUpdatedAt,
     filter,
     handleOpenCountySite,
+    handleAskAssistant,
+    assistantDraft,
     loadDashboardApi,
     lockedCounty,
     reportData,

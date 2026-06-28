@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import useAEISStore from "../store/useAEISStore";
+import { sameCounty, sameSubCounty, subCountyName, wardName } from "../utils/boundaries";
 
 function uniqueSorted(values) {
   return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
@@ -29,28 +30,35 @@ export default function CountyFilter({ counties, value, onChange, allowNational 
   }, [counties, search]);
 
   const selectedCounty = counties.find((county) => county.name === value.county) || null;
+  const selectedCountyFeature = selectedCounty
+    ? { properties: { ADM1_EN: selectedCounty.name, ADM1_PCODE: selectedCounty.countyCode } }
+    : null;
+
   const boundarySubcounties = useMemo(() => {
     if (!selectedCounty || !subcounties?.features?.length) return [];
     return uniqueSorted(
       subcounties.features
-        .filter((feature) => feature.properties?.ADM1_EN === selectedCounty.name)
-        .map((feature) => feature.properties?.ADM2_EN)
+        .filter((feature) => sameCounty(feature, selectedCountyFeature))
+        .map((feature) => subCountyName(feature))
     );
-  }, [selectedCounty, subcounties]);
+  }, [selectedCounty, selectedCountyFeature, subcounties]);
 
   const boundaryWards = useMemo(() => {
     if (!selectedCounty || !wards?.features?.length) return [];
+    const selectedSubCountyFeature = value.subcounty
+      ? { properties: { ADM2_EN: value.subcounty, ADM1_EN: selectedCounty.name } }
+      : null;
+
     return uniqueSorted(
       wards.features
         .filter((feature) => {
-          const props = feature.properties || {};
-          if (props.ADM1_EN && props.ADM1_EN !== selectedCounty.name) return false;
-          if (value.subcounty && props.ADM2_EN && props.ADM2_EN !== value.subcounty) return false;
-          return props.ADM1_EN === selectedCounty.name || props.ADM2_EN === value.subcounty;
+          if (!sameCounty(feature, selectedCountyFeature)) return false;
+          if (selectedSubCountyFeature && !sameSubCounty(feature, selectedSubCountyFeature)) return false;
+          return true;
         })
-        .map((feature) => feature.properties?.ADM3_EN || feature.properties?.shapeName)
+        .map((feature) => wardName(feature))
     );
-  }, [selectedCounty, value.subcounty, wards]);
+  }, [selectedCounty, selectedCountyFeature, value.subcounty, wards]);
 
   const updateCounty = (countyName) => {
     if (isLocked) return;

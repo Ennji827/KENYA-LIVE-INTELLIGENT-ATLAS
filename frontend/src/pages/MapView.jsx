@@ -13,6 +13,14 @@ import LiveMap from "../components/maps/LiveMap";
 import CountyAtlasPanel from "../components/CountyAtlasPanel";
 import LiveWeatherForecastPanel from "../components/LiveWeatherForecastPanel";
 import useAEISStore from "../store/useAEISStore";
+import {
+  countyName as boundaryCountyName,
+  normalizeAdminName,
+  sameCounty,
+  sameSubCounty,
+  subCountyName as boundarySubCountyName,
+  wardName as boundaryWardName,
+} from "../utils/boundaries";
 
 function readLocalFarms() {
   try {
@@ -23,8 +31,8 @@ function readLocalFarms() {
   }
 }
 
-function nameOf(feature, property) {
-  return feature?.properties?.[property] || "";
+function sameAdminName(left, right) {
+  return Boolean(normalizeAdminName(left) && normalizeAdminName(left) === normalizeAdminName(right));
 }
 
 export default function MapView({ filter, setFilter, lockedCounty = "" }) {
@@ -69,12 +77,12 @@ export default function MapView({ filter, setFilter, lockedCounty = "" }) {
       return;
     }
 
-    const countyFeature = counties.features.find(
-      (feature) => nameOf(feature, "ADM1_EN") === targetCountyName
+    const countyFeature = counties.features.find((feature) =>
+      sameCounty(feature, { properties: { ADM1_EN: targetCountyName } })
     );
     if (!countyFeature) return;
 
-    if (nameOf(selectedCounty, "ADM1_EN") !== targetCountyName) {
+    if (!sameAdminName(boundaryCountyName(selectedCounty), targetCountyName)) {
       setSelectedCounty(countyFeature);
     }
   }, [counties, filter.county, lockedCounty, selectedCounty, setSelectedCounty]);
@@ -85,12 +93,11 @@ export default function MapView({ filter, setFilter, lockedCounty = "" }) {
       return;
     }
 
-    const feature = subcounties.features.find(
-      (item) =>
-        nameOf(item, "ADM1_EN") === nameOf(selectedCounty, "ADM1_EN") &&
-        nameOf(item, "ADM2_EN") === filter.subcounty
+    const targetSubCounty = { properties: { ADM2_EN: filter.subcounty } };
+    const feature = subcounties.features.find((item) =>
+      sameCounty(item, selectedCounty) && sameSubCounty(item, targetSubCounty)
     );
-    if (feature && nameOf(selectedSubCounty, "ADM2_EN") !== filter.subcounty) {
+    if (feature && !sameSubCounty(selectedSubCounty, targetSubCounty)) {
       setSelectedSubCounty(feature);
     }
   }, [filter.subcounty, selectedCounty, selectedSubCounty, setSelectedSubCounty, subcounties]);
@@ -102,15 +109,13 @@ export default function MapView({ filter, setFilter, lockedCounty = "" }) {
     }
 
     const feature = wards.features.find((item) => {
-      const wardName = nameOf(item, "shapeName") || nameOf(item, "ADM3_EN");
       return (
-        wardName === filter.ward &&
-        (!filter.subcounty || nameOf(item, "ADM2_EN") === filter.subcounty) &&
-        (!nameOf(item, "ADM1_EN") || nameOf(item, "ADM1_EN") === nameOf(selectedCounty, "ADM1_EN"))
+        sameAdminName(boundaryWardName(item), filter.ward) &&
+        (!filter.subcounty || sameSubCounty(item, { properties: { ADM2_EN: filter.subcounty } })) &&
+        sameCounty(item, selectedCounty)
       );
     });
-    const selectedWardName = nameOf(selectedWard, "shapeName") || nameOf(selectedWard, "ADM3_EN");
-    if (feature && selectedWardName !== filter.ward) setSelectedWard(feature);
+    if (feature && !sameAdminName(boundaryWardName(selectedWard), filter.ward)) setSelectedWard(feature);
   }, [filter.subcounty, filter.ward, selectedCounty, selectedWard, setSelectedWard, wards]);
 
   useEffect(() => {
@@ -123,8 +128,8 @@ export default function MapView({ filter, setFilter, lockedCounty = "" }) {
 
   const selectCounty = useCallback(
     (feature) => {
-      const county = nameOf(feature, "ADM1_EN");
-      if (!county || (lockedCounty && county !== lockedCounty)) return;
+      const county = boundaryCountyName(feature);
+      if (!county || (lockedCounty && !sameAdminName(county, lockedCounty))) return;
       setSelectedCounty(feature);
       setFilter({ county, subcounty: "", ward: "" });
     },
@@ -133,8 +138,8 @@ export default function MapView({ filter, setFilter, lockedCounty = "" }) {
 
   const selectSubCounty = useCallback(
     (feature) => {
-      const subcounty = nameOf(feature, "ADM2_EN");
-      const county = nameOf(feature, "ADM1_EN") || nameOf(selectedCounty, "ADM1_EN");
+      const subcounty = boundarySubCountyName(feature);
+      const county = boundaryCountyName(feature) || boundaryCountyName(selectedCounty);
       if (!county || !subcounty) return;
       setSelectedSubCounty(feature);
       setFilter({ county, subcounty, ward: "" });
@@ -144,12 +149,12 @@ export default function MapView({ filter, setFilter, lockedCounty = "" }) {
 
   const selectWard = useCallback(
     (feature) => {
-      const ward = nameOf(feature, "shapeName") || nameOf(feature, "ADM3_EN");
+      const ward = boundaryWardName(feature);
       if (!ward || !selectedCounty) return;
       setSelectedWard(feature);
       setFilter({
-        county: nameOf(selectedCounty, "ADM1_EN"),
-        subcounty: nameOf(selectedSubCounty, "ADM2_EN"),
+        county: boundaryCountyName(selectedCounty),
+        subcounty: boundarySubCountyName(selectedSubCounty) || boundarySubCountyName(feature),
         ward,
       });
     },
@@ -214,7 +219,7 @@ export default function MapView({ filter, setFilter, lockedCounty = "" }) {
   };
 
   const activeProviderLayer = ["landsatLatest", "nasaTrueColor", "nasaNdvi", "nasaLst"].find((key) => layers[key]) || "";
-  const countyName = nameOf(selectedCounty, "ADM1_EN");
+  const countyName = boundaryCountyName(selectedCounty);
 
   return (
     <>

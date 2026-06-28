@@ -1,5 +1,6 @@
 import React from "react";
 import { GeoJSON } from "react-leaflet";
+import { sameCounty, sameSubCounty, subCountyName } from "../../utils/boundaries";
 
 const COLORS = {
   normal: "#f97316",
@@ -16,23 +17,12 @@ export default function SubCountyLayer({
   zoomTo,
 }) {
   const isInCounty = (f) => {
-    if (!selectedCounty) return false; // Only show subcounties if a county is selected
-    const p = f.properties;
-    const s = selectedCounty.properties;
-    
-    // Primary match on PCODE (Standard)
-    if (p.ADM1_PCODE && s.ADM1_PCODE) return p.ADM1_PCODE === s.ADM1_PCODE;
-    // Fallback to strict name matching
-    return (p.ADM1_EN || p.County || p.NAME_1) === (s.ADM1_EN || s.NAME);
+    if (!selectedCounty) return false;
+    return sameCounty(f, selectedCounty);
   };
 
   const isSelected = (f) => {
-    const selected = selectedSubCounty?.properties;
-    const current = f.properties;
-    return (
-      (selected?.ADM2_PCODE && selected.ADM2_PCODE === current?.ADM2_PCODE) ||
-      (selected?.ADM2_EN && selected.ADM2_EN === current?.ADM2_EN)
-    );
+    return sameSubCounty(f, selectedSubCounty);
   };
 
   const style = (f) => {
@@ -58,7 +48,7 @@ export default function SubCountyLayer({
       data={data}
       style={style}
       onEachFeature={(f, layer) => {
-        const name = f.properties?.ADM2_EN || "SubCounty";
+        const name = subCountyName(f) || "Sub-county";
 
         layer.bindTooltip(name, {
           sticky: true,

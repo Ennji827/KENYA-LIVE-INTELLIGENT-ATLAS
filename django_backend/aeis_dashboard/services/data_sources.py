@@ -30,7 +30,7 @@ LANDSAT_STAC_SEARCH_URL = "https://landsatlook.usgs.gov/stac-server/search"
 DEAFRICA_STAC_SEARCH_URL = "https://explorer.digitalearth.africa/stac/search"
 DEAFRICA_WMS_URL = "https://ows.digitalearth.africa/wms"
 DEAFRICA_WMS_CAPABILITIES_URL = f"{DEAFRICA_WMS_URL}?service=WMS&request=GetCapabilities&version=1.3.0"
-MAX_HISTORY_DAYS = 366 * 12
+MAX_HISTORY_DAYS = 366 * 22
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 GEOJSON_PARSE_LIMIT = 30 * 1024 * 1024
 ALLOWED_PARAMETERS = {
@@ -154,6 +154,8 @@ def _iso(value) -> str | None:
 
 
 def source_catalog() -> dict:
+    today = date.today()
+    recommended_start = date(today.year - 20, 1, 1)
     custom = [
         {
             "slug": source.slug,
@@ -182,8 +184,8 @@ def source_catalog() -> dict:
             "latest_upload": _iso(assets.first().created_at) if assets.exists() else None,
         },
         "history_window": {
-            "recommended_start": (date.today() - timedelta(days=3652)).isoformat(),
-            "end": date.today().isoformat(),
+            "recommended_start": recommended_start.isoformat(),
+            "end": today.isoformat(),
         },
         "generated_at": domain.now_iso(),
     }
@@ -280,7 +282,7 @@ def nasa_power_history(query) -> dict:
     if requested_start > requested_end:
         raise DataSourceError("start must be on or before end.")
     if (requested_end - requested_start).days > MAX_HISTORY_DAYS:
-        raise DataSourceError("One request may cover at most twelve years.")
+        raise DataSourceError("One request may cover at most twenty-two years.")
 
     lat, lon, scope = _location(query.get("county"), query.get("latitude"), query.get("longitude"))
     parameters = _parameters(query.get("parameters"))
@@ -371,7 +373,7 @@ def sentinel_2_search(query) -> dict:
     if start > end:
         raise DataSourceError("start must be on or before end.")
     if (end - start).days > MAX_HISTORY_DAYS:
-        raise DataSourceError("One imagery search may cover at most twelve years.")
+        raise DataSourceError("One imagery search may cover at most twenty-two years.")
     county = str(query.get("county") or "").strip()
     feature = domain.find_county(county)
     if not feature:

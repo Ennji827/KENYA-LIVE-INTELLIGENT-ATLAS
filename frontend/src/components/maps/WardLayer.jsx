@@ -1,5 +1,6 @@
 import React from "react";
 import { GeoJSON } from "react-leaflet";
+import { sameCounty, sameSubCounty, sameWard, wardName } from "../../utils/boundaries";
 
 const COLORS = {
   hover: "#111827",
@@ -18,23 +19,15 @@ export default function WardLayer({
   zoomTo,
 }) {
   const isWardSelected = (f) => {
-    if (!selectedWard) return false;
-    const s = selectedWard.properties;
-    const p = f.properties;
-    return (s.shapeID && s.shapeID === p.shapeID) ||
-           (s.ADM3_PCODE && s.ADM3_PCODE === p.ADM3_PCODE) || 
-           (s.shapeName === p.shapeName && s.ADM2_EN === p.ADM2_EN);
+    return sameWard(f, selectedWard);
   };
 
   const isInSubCounty = (f) => {
     if (isWardSelected(f)) return true;
-    if (!selectedSubCounty) return false; // Only show wards if a subcounty is selected
+    if (selectedSubCounty) return sameSubCounty(f, selectedSubCounty);
+    if (selectedCounty) return sameCounty(f, selectedCounty);
 
-    const parent = f.properties?.ADM2_EN || f.properties?.SubCounty || f.properties?.NAME_2;
-    const selected = selectedSubCounty.properties?.ADM2_EN || selectedSubCounty.properties?.NAME;
-    
-    return (f.properties?.ADM2_PCODE && f.properties?.ADM2_PCODE === selectedSubCounty.properties?.ADM2_PCODE) ||
-           (parent === selected);
+    return false;
   };
 
   const getStyle = (f) => {
@@ -86,8 +79,7 @@ export default function WardLayer({
       data={data}
       style={getStyle}
       onEachFeature={(f, layer) => {
-        const name = f.properties?.shapeName || "Ward";
-        const isSelected = isWardSelected(f);
+        const name = wardName(f) || "Ward";
 
         layer.bindTooltip(name, {
           sticky: true,

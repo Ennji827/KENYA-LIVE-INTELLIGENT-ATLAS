@@ -6345,8 +6345,248 @@ body {
   font-size: 11px;
 }
 
+.aeis-insight-studio {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(34, 197, 94, 0.14), transparent 34%),
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.12), transparent 30%),
+    #ffffff;
+}
+
+.aeis-insight-studio-head,
+.aeis-insight-panel-head,
+.aeis-insight-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.aeis-insight-studio-head h2 {
+  margin: 3px 0 5px;
+  font-size: clamp(20px, 2vw, 28px);
+  letter-spacing: -0.04em;
+  color: #0f172a;
+}
+
+.aeis-insight-studio-head p,
+.aeis-insight-panel-head span,
+.aeis-source-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.aeis-insight-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.aeis-insight-summary {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.4fr) repeat(3, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.aeis-insight-signal,
+.aeis-insight-stat,
+.aeis-source-pill,
+.aeis-satellite-readiness div {
+  border: 1px solid #dce7ef;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.aeis-insight-signal {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  min-height: 104px;
+  padding: 15px;
+}
+
+.aeis-insight-signal svg {
+  flex: 0 0 auto;
+  color: #2563eb;
+}
+
+.aeis-insight-signal strong,
+.aeis-insight-stat strong,
+.aeis-insight-panel-head strong,
+.aeis-source-pill strong,
+.aeis-satellite-readiness strong {
+  display: block;
+  color: #0f172a;
+}
+
+.aeis-insight-signal span,
+.aeis-insight-stat em,
+.aeis-source-pill em,
+.aeis-satellite-readiness span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.aeis-insight-signal.wet {
+  border-color: #bae6fd;
+  background: linear-gradient(135deg, rgba(224, 242, 254, 0.95), rgba(255, 255, 255, 0.88));
+}
+
+.aeis-insight-signal.dry {
+  border-color: #fed7aa;
+  background: linear-gradient(135deg, rgba(255, 237, 213, 0.95), rgba(255, 255, 255, 0.88));
+}
+
+.aeis-insight-signal.stable {
+  border-color: #bbf7d0;
+  background: linear-gradient(135deg, rgba(220, 252, 231, 0.95), rgba(255, 255, 255, 0.88));
+}
+
+.aeis-insight-stat {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-height: 104px;
+  padding: 14px;
+}
+
+.aeis-insight-stat span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.aeis-insight-stat strong {
+  font-size: 25px;
+  letter-spacing: -0.05em;
+}
+
+.aeis-insight-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  gap: 14px;
+}
+
+.aeis-insight-chart-panel,
+.aeis-insight-source-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #dce7ef;
+  border-radius: 20px;
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.aeis-insight-panel-head {
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.aeis-insight-panel-head svg {
+  color: #16a34a;
+}
+
+.aeis-insight-empty-chart {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  padding: 22px;
+  text-align: center;
+  color: #64748b;
+  border: 1px dashed #cbd5e1;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.aeis-insight-empty-chart svg {
+  color: #38bdf8;
+}
+
+.aeis-source-pill-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.aeis-source-pill {
+  display: grid;
+  gap: 4px;
+  padding: 11px;
+  border-left: 4px solid #94a3b8;
+}
+
+.aeis-source-pill span {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.aeis-source-pill.live {
+  border-left-color: #22c55e;
+}
+
+.aeis-source-pill.setup {
+  border-left-color: #f97316;
+}
+
+.aeis-satellite-readiness {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.aeis-satellite-readiness div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  align-items: center;
+  padding: 11px;
+}
+
+.aeis-satellite-readiness svg {
+  grid-row: span 2;
+  color: #16a34a;
+}
+
+.aeis-secondary-details {
+  border: 1px solid #dce7ef;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+}
+
+.aeis-secondary-details summary {
+  cursor: pointer;
+  padding: 14px 16px;
+  color: #0f172a;
+  font-weight: 900;
+}
+
+.aeis-secondary-details summary::marker {
+  color: #16a34a;
+}
+
+.aeis-secondary-details-body {
+  padding: 0 12px 12px;
+}
+
 @media (max-width: 1220px) {
   .aeis-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .aeis-insight-summary,
+  .aeis-insight-grid {
     grid-template-columns: 1fr;
   }
 
@@ -6371,5 +6611,17 @@ body {
   .aeis-weather-live-card.compact .aeis-weather-current-grid,
   .aeis-weather-live-card.compact .aeis-weather-metrics {
     grid-template-columns: 1fr;
+  }
+
+  .aeis-insight-studio-head,
+  .aeis-insight-panel-head,
+  .aeis-insight-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .aeis-insight-actions .aeis-btn {
+    justify-content: center;
+    width: 100%;
   }
 }

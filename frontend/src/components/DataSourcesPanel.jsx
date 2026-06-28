@@ -5,10 +5,14 @@ function isoDate(value = new Date()) {
   return value.toISOString().slice(0, 10);
 }
 
-function tenYearsAgo() {
+function twentyYearsAgo() {
   const value = new Date();
-  value.setFullYear(value.getFullYear() - 10);
+  value.setFullYear(value.getFullYear() - 20);
   return isoDate(value);
+}
+
+function sentinelArchiveStart() {
+  return "2015-06-27";
 }
 
 function formatBytes(value) {
@@ -34,13 +38,13 @@ export default function DataSourcesPanel({ session, selectedCounty, readOnly = f
   const [historyForm, setHistoryForm] = useState({
     county: defaultCounty,
     temporal: "monthly",
-    start: tenYearsAgo(),
+    start: twentyYearsAgo(),
     end: isoDate(),
   });
   const [imageryForm, setImageryForm] = useState({
     county: defaultCounty,
     collection: "sentinel-2-l2a",
-    start: tenYearsAgo(),
+    start: sentinelArchiveStart(),
     end: isoDate(),
     max_cloud: "30",
   });
