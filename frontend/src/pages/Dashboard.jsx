@@ -40,6 +40,7 @@ const CountySites = lazy(() => import("./CountySites"));
 const PersistentMapPanel = lazy(() => import("../components/PersistentMapPanel"));
 const LiveWeatherForecastPanel = lazy(() => import("../components/LiveWeatherForecastPanel"));
 const ClimateInsightStudio = lazy(() => import("../components/ClimateInsightStudio"));
+const EnvironmentalIntelligenceHub = lazy(() => import("../components/EnvironmentalIntelligenceHub"));
 
 function WorkspaceLoading() {
   return (
@@ -237,6 +238,15 @@ function DashboardHome({
 
       <div style={{ height: 16 }} />
       <CountyFilter counties={kenyaCounties} value={filter} onChange={setFilter} lockedCounty={lockedCounty} />
+
+      <div style={{ height: 16 }} />
+      <Suspense fallback={<WorkspaceLoading />}>
+        <EnvironmentalIntelligenceHub
+          session={session}
+          county={selectedCounty}
+          onOpenAssistant={onAskAssistant}
+        />
+      </Suspense>
 
       <div style={{ height: 16 }} />
       <Suspense fallback={<WorkspaceLoading />}>
@@ -511,6 +521,7 @@ export default function Dashboard() {
       session,
       onOpenCounty: handleOpenCountySite,
       initialQuestion: assistantDraft,
+      onAskAssistant: handleAskAssistant,
     };
 
     if (activePage === "map") return <MapView {...sharedProps} />;

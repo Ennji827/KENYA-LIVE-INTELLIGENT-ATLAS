@@ -60,7 +60,7 @@ export default function CommandCenterHero({
               {statusCopy(dataStatus)}
             </span>
           </div>
-          <h1>{countyMode ? `${selectedCounty.name} Intelligence` : "National Agriculture Command Center"}</h1>
+          <h1>{countyMode ? `${selectedCounty.name} Intelligence` : "National Climate & Land Command Center"}</h1>
           <p>
             {countyMode
               ? `Live weather, administrative boundaries, satellite discovery, and operational evidence for county code ${selectedCounty.countyCode}.`

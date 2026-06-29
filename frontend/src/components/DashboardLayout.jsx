@@ -16,12 +16,12 @@ import KsaPoweredBy from "./KsaPoweredBy";
 import SystemStatusBar from "./SystemStatusBar";
 
 const navItems = [
-  { id: "home", label: "Dashboard Home", icon: LayoutDashboard },
+  { id: "home", label: "Climate Command", icon: LayoutDashboard },
   { id: "map", label: "Map Intelligence", icon: Map },
   { id: "intelligence", label: "Intelligence Assistant", icon: Bot },
   { id: "county", label: "County Dashboard", icon: MapPinned },
   { id: "county-sites", label: "County Sites", icon: Building2 },
-  { id: "farmer", label: "Farmer Dashboard", icon: Sprout },
+  { id: "farmer", label: "Field Dashboard", icon: Sprout },
   { id: "reports", label: "Reports", icon: FileText },
   { id: "admin", label: "Admin / Ministry", icon: ShieldCheck },
 ];
@@ -68,7 +68,7 @@ export default function DashboardLayout({
           <span className="aeis-brand-mark"><BarChart3 size={23} /></span>
           <div>
             <h1>AEIS-K</h1>
-            <p>Agro-Environmental Intelligence</p>
+            <p>Climate, Water & Land Intelligence</p>
           </div>
         </div>
         {session && (

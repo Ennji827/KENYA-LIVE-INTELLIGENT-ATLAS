@@ -1,4 +1,4 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import CountyFilter from "../components/CountyFilter";
 import CropHealthPanel from "../components/CropHealthPanel";
 import FertilizerPanel from "../components/FertilizerPanel";
@@ -11,7 +11,19 @@ import StatCard from "../components/StatCard";
 import FieldReportsPanel from "../components/FieldReportsPanel";
 import { getDashboardKpis, kenyaCounties } from "../data/kenyaCountyCatalog";
 
-export default function CountyDashboard({ filter, setFilter, selectedCounty, lockedCounty, session }) {
+const EnvironmentalIntelligenceHub = lazy(() => import("../components/EnvironmentalIntelligenceHub"));
+
+function WorkspaceLoading() {
+  return (
+    <div className="aeis-card aeis-card-pad aeis-workspace-loading" role="status">
+      <span className="aeis-skeleton wide" />
+      <span className="aeis-skeleton" />
+      <span className="aeis-skeleton short" />
+    </div>
+  );
+}
+
+export default function CountyDashboard({ filter, setFilter, selectedCounty, lockedCounty, session, onAskAssistant }) {
   if (!selectedCounty) {
     return (
       <>
@@ -54,6 +66,15 @@ export default function CountyDashboard({ filter, setFilter, selectedCounty, loc
           <StatCard key={kpi.label} {...kpi} />
         ))}
       </div>
+
+      <div style={{ height: 16 }} />
+      <Suspense fallback={<WorkspaceLoading />}>
+        <EnvironmentalIntelligenceHub
+          session={session}
+          county={selectedCounty}
+          onOpenAssistant={onAskAssistant}
+        />
+      </Suspense>
 
       <div style={{ height: 16 }} />
       <CountyIntelligenceBrief county={selectedCounty} />

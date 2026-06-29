@@ -8,8 +8,8 @@ const FEATURES = [
         <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
       </svg>
     ),
-    title: "47-County Coverage",
-    desc: "Full GIS boundary data for every county, sub-county, and ward across Kenya.",
+    title: "47-County Weather & Land Coverage",
+    desc: "GIS boundary data for every county, sub-county, and ward, with national-to-county intelligence views.",
   },
   {
     icon: (
@@ -17,8 +17,8 @@ const FEATURES = [
         <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
       </svg>
     ),
-    title: "Satellite Intelligence",
-    desc: "Sentinel-2 and Landsat imagery with NDVI, NDWI, and land-cover analysis.",
+    title: "Satellite and Water Intelligence",
+    desc: "Sentinel-2, Landsat, NDVI, NDWI, land-cover, forest, and surface-water source paths.",
   },
   {
     icon: (
@@ -26,8 +26,8 @@ const FEATURES = [
         <path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
       </svg>
     ),
-    title: "Live Climate Data",
-    desc: "Real-time weather forecasts and historical NASA POWER climate records.",
+    title: "Rainfall and Climate Data",
+    desc: "Live weather forecasts, ten-year rainfall history, and source-backed climate comparison.",
   },
   {
     icon: (
@@ -35,8 +35,8 @@ const FEATURES = [
         <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
       </svg>
     ),
-    title: "AI-Backed Insights",
-    desc: "Evidence-grounded intelligence analysis and field report verification.",
+    title: "County Decision Consoles",
+    desc: "Rainfall, water, vegetation, forest, soil health, land-use, roads, and field evidence in one workspace.",
   },
 ];
 
@@ -72,15 +72,16 @@ export default function LandingPage({ onSignIn, onSignUp }) {
       {/* ── Hero ── */}
       <section className="lp-hero">
         <div className="lp-hero-inner">
-          <div className="lp-badge">Agro-Environmental Intelligence</div>
+          <div className="lp-badge">Climate, Water & Land Intelligence</div>
           <h1 className="lp-hero-title">
             Kenya's National<br />
-            <span className="lp-hero-accent">Agricultural Intelligence</span><br />
+            <span className="lp-hero-accent">Weather Intelligence</span><br />
             Platform
           </h1>
           <p className="lp-hero-sub">
-            Satellite imagery, climate data, and AI-backed analysis for every county —
-            built for researchers, decision makers, and industry professionals.
+            Rainfall history, weather signals, water, vegetation, forest, soil, land-use,
+            and road intelligence for every county - built for researchers, decision makers,
+            and industry professionals.
           </p>
           <div className="lp-hero-ctas">
             <button type="button" className="lp-cta-primary" onClick={onSignUp}>
@@ -140,8 +141,8 @@ export default function LandingPage({ onSignIn, onSignUp }) {
       {/* ── Features ── */}
       <section className="lp-features">
         <div className="lp-section-inner">
-          <h2 className="lp-section-title">Everything you need for agro-environmental intelligence</h2>
-          <p className="lp-section-sub">One platform connecting satellite, climate, and field data for evidence-backed decisions.</p>
+          <h2 className="lp-section-title">Everything needed for climate, water, and land intelligence</h2>
+          <p className="lp-section-sub">One platform connecting weather, satellite, land-use, infrastructure, and field data for evidence-backed decisions.</p>
           <div className="lp-features-grid">
             {FEATURES.map((f) => (
               <div key={f.title} className="lp-feature-card">
@@ -158,8 +159,8 @@ export default function LandingPage({ onSignIn, onSignUp }) {
       <section className="lp-cta-band">
         <div className="lp-section-inner lp-cta-band-inner">
           <div>
-            <h2 className="lp-cta-band-title">Ready to explore Kenya's agricultural data?</h2>
-            <p className="lp-cta-band-sub">Join researchers, analysts, and decision makers using AEIS-K.</p>
+            <h2 className="lp-cta-band-title">Ready to explore Kenya's weather and land intelligence?</h2>
+            <p className="lp-cta-band-sub">Join researchers, analysts, counties, and decision makers using AEIS-K.</p>
           </div>
           <div className="lp-cta-band-actions">
             <button type="button" className="lp-cta-primary" onClick={onSignUp}>Create free account</button>
@@ -179,7 +180,7 @@ export default function LandingPage({ onSignIn, onSignUp }) {
             </svg>
             <span className="lp-logo-name" style={{ color: "#94a3b8" }}>AEIS-K</span>
           </div>
-          <p className="lp-footer-copy">Agro-Environmental Intelligence System for Kenya</p>
+          <p className="lp-footer-copy">Climate, Water and Land Intelligence System for Kenya</p>
           <KsaPoweredBy />
         </div>
       </footer>
