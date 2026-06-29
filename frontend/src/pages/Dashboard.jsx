@@ -29,6 +29,7 @@ import {
 import { getApiBase } from "../utils/api";
 import "../styles/dashboard.css";
 
+const LandingPage = lazy(() => import("./LandingPage"));
 const MapView = lazy(() => import("./MapView"));
 const CountyDashboard = lazy(() => import("./CountyDashboard"));
 const FarmerDashboard = lazy(() => import("./FarmerDashboard"));
@@ -293,6 +294,7 @@ function DashboardHome({
 export default function Dashboard() {
   const [authReady, setAuthReady] = useState(false);
   const [session, setSession] = useState(null);
+  const [portalView, setPortalView] = useState("landing"); // landing | signin | register
   const [activePage, setActivePage] = useState("home");
   const [filter, setFilter] = useState({
     county: "",
@@ -443,6 +445,7 @@ export default function Dashboard() {
     const current = session;
     clearAuthSession();
     setSession(null);
+    setPortalView("landing");
     setFilter({ county: "", subcounty: "", ward: "" });
     setActivePage("home");
     setDashboardData(nationalSummary);
@@ -569,14 +572,32 @@ export default function Dashboard() {
 
   if (!authReady) {
     return (
-      <div className="aeis-auth-shell">
-        <div className="aeis-card aeis-card-pad">Loading AEIS-K session...</div>
+      <div className="auth-shell">
+        <div className="auth-card" style={{ textAlign: "center", color: "#64748b", fontWeight: 700 }}>
+          Loading AEIS-K…
+        </div>
       </div>
     );
   }
 
   if (!session) {
-    return <AuthGateway onAuthenticated={setSession} />;
+    if (portalView === "landing") {
+      return (
+        <Suspense fallback={null}>
+          <LandingPage
+            onSignIn={() => setPortalView("signin")}
+            onSignUp={() => setPortalView("register")}
+          />
+        </Suspense>
+      );
+    }
+    return (
+      <AuthGateway
+        onAuthenticated={setSession}
+        initialView={portalView === "register" ? "register" : "signin"}
+        onBack={() => setPortalView("landing")}
+      />
+    );
   }
 
   return (
