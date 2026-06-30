@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from calendar import monthrange
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import hashlib
 import json
@@ -43,6 +45,15 @@ ALLOWED_PARAMETERS = {
     "ALLSKY_SFC_SW_DWN",
 }
 DEFAULT_PARAMETERS = ["PRECTOTCORR", "T2M", "T2M_MAX", "T2M_MIN", "RH2M", "WS2M"]
+MONTHLY_INTELLIGENCE_PARAMETERS = [
+    "PRECTOTCORR",
+    "T2M",
+    "T2M_MAX",
+    "T2M_MIN",
+    "RH2M",
+    "WS2M",
+    "ALLSKY_SFC_SW_DWN",
+]
 FILE_FORMATS = {
     ".geojson": ("geojson", DataAsset.AssetType.VECTOR),
     ".json": ("geojson", DataAsset.AssetType.VECTOR),
@@ -79,6 +90,41 @@ BUILTIN_SOURCES = [
         "description": "Key-free ten-day weather forecasts using the provider's best-match model.",
     },
     {
+        "slug": "kenya-meteorological-department",
+        "name": "Kenya Meteorological Department official weather and climate data",
+        "provider": "Kenya Meteorological Department",
+        "source_type": "climate",
+        "coverage_start": None,
+        "coverage_end": None,
+        "latest_available": "publication-dependent",
+        "requires_auth": False,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "website": "https://meteo.go.ke/",
+            "maproom": "http://kmddl.meteo.go.ke:8081/",
+            "climate_data_management": "https://meteo.go.ke/",
+        },
+        "description": "Preferred local source for official station rainfall, monthly forecasts, seasonal forecasts, agrometeorological bulletins, and climate data management. Connect via API, reviewed CSV, or licensed data export before publishing official county figures.",
+    },
+    {
+        "slug": "kalro-kaop-weather",
+        "name": "KALRO / KAOP agro-weather and advisory data",
+        "provider": "Kenya Agricultural and Livestock Research Organization",
+        "source_type": "climate",
+        "coverage_start": None,
+        "coverage_end": None,
+        "latest_available": "publication-dependent",
+        "requires_auth": False,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "kaop": "https://kaop.co.ke/",
+            "documentation": "https://www.kalro.org/",
+        },
+        "description": "Preferred local agro-weather and advisory source when KALRO/KAOP data access is available. Use for county and crop-zone weather context after an API key, data-sharing agreement, or reviewed export is connected.",
+    },
+    {
         "slug": "nasa-power",
         "name": "NASA POWER climate history",
         "provider": "NASA Langley Research Center",
@@ -91,6 +137,7 @@ BUILTIN_SOURCES = [
         "access": "connected",
         "endpoints": {
             "history": "/api/data/history/nasa-power",
+            "monthly_intelligence": "/api/data/intelligence/monthly",
             "documentation": "https://power.larc.nasa.gov/docs/services/api/temporal/",
         },
         "description": "Daily and monthly precipitation, temperature, humidity, wind, and solar data.",
@@ -460,6 +507,353 @@ def nasa_power_history(query) -> dict:
         "source_url": url,
         "generated_at": domain.now_iso(),
     }
+
+
+def _clamp(value: float | None, minimum: float = 0, maximum: float = 100) -> float | None:
+    if value is None or not math.isfinite(value):
+        return None
+    return round(max(minimum, min(maximum, value)), 1)
+
+
+def _mean(values: list[float | int | None]) -> float | None:
+    valid = [float(value) for value in values if isinstance(value, (int, float)) and math.isfinite(float(value))]
+    if not valid:
+        return None
+    return sum(valid) / len(valid)
+
+
+def _sum(values: list[float | int | None]) -> float | None:
+    valid = [float(value) for value in values if isinstance(value, (int, float)) and math.isfinite(float(value))]
+    if not valid:
+        return None
+    return sum(valid)
+
+
+def _round(value: float | None, digits: int = 1) -> float | None:
+    if value is None or not math.isfinite(value):
+        return None
+    return round(value, digits)
+
+
+def _parameter_units(history: dict, parameter: str) -> str:
+    return str((history.get("parameters") or {}).get(parameter, {}).get("units") or "").lower()
+
+
+def _monthly_rainfall_mm(row: dict, units: str) -> float | None:
+    raw = row.get("PRECTOTCORR")
+    if not isinstance(raw, (int, float)) or not math.isfinite(float(raw)):
+        return None
+    try:
+        parsed = date.fromisoformat(str(row.get("date")))
+    except (TypeError, ValueError):
+        return _round(float(raw))
+    if "mm/day" in units or "mm d" in units:
+        return _round(float(raw) * monthrange(parsed.year, parsed.month)[1])
+    return _round(float(raw))
+
+
+def _monthly_record(row: dict, rainfall_units: str, county_name: str | None = None) -> dict:
+    parsed = date.fromisoformat(str(row["date"]))
+    rainfall_mm = _monthly_rainfall_mm(row, rainfall_units)
+    temp = _round(float(row["T2M"]), 1) if isinstance(row.get("T2M"), (int, float)) else None
+    temp_max = _round(float(row["T2M_MAX"]), 1) if isinstance(row.get("T2M_MAX"), (int, float)) else None
+    temp_min = _round(float(row["T2M_MIN"]), 1) if isinstance(row.get("T2M_MIN"), (int, float)) else None
+    humidity = _round(float(row["RH2M"]), 1) if isinstance(row.get("RH2M"), (int, float)) else None
+    wind = _round(float(row["WS2M"]), 1) if isinstance(row.get("WS2M"), (int, float)) else None
+    solar = _round(float(row["ALLSKY_SFC_SW_DWN"]), 1) if isinstance(row.get("ALLSKY_SFC_SW_DWN"), (int, float)) else None
+
+    rainfall_score = 0 if rainfall_mm is None else min(100, rainfall_mm / 220 * 100)
+    humidity_score = 50 if humidity is None else humidity
+    heat_penalty = 0 if temp is None else max(0, temp - 26) * 2.8
+    water_pressure = _clamp((rainfall_score * 0.64) + (humidity_score * 0.36) - heat_penalty)
+    temp_support = 55 if temp is None else max(0, 100 - abs(temp - 24) * 7)
+    vegetation_support = _clamp(((water_pressure or 0) * 0.68) + (temp_support * 0.32))
+    soil_moisture_proxy = _clamp(((water_pressure or 0) * 0.78) + (humidity_score * 0.22) - heat_penalty / 2)
+    dryness_pressure = _clamp(100 - (water_pressure or 0) + max(0, (temp or 24) - 28) * 2 + max(0, (wind or 2) - 4) * 3)
+
+    record = {
+        "date": parsed.isoformat(),
+        "month": parsed.strftime("%b %Y"),
+        "year": parsed.year,
+        "month_index": parsed.month,
+        "rainfall_mm": rainfall_mm,
+        "temperature_c": temp,
+        "temperature_max_c": temp_max,
+        "temperature_min_c": temp_min,
+        "humidity_pct": humidity,
+        "wind_ms": wind,
+        "solar_mj_m2_day": solar,
+        "water_pressure_index": water_pressure,
+        "vegetation_support_index": vegetation_support,
+        "soil_moisture_proxy": soil_moisture_proxy,
+        "dryness_pressure_index": dryness_pressure,
+    }
+    if county_name:
+        record["county"] = county_name
+    return record
+
+
+def _annual_summaries(records: list[dict]) -> list[dict]:
+    annual: dict[int, list[dict]] = {}
+    for row in records:
+        annual.setdefault(int(row["year"]), []).append(row)
+    return [
+        {
+            "year": year,
+            "rainfall_mm": _round(_sum([row.get("rainfall_mm") for row in rows])),
+            "temperature_c": _round(_mean([row.get("temperature_c") for row in rows])),
+            "water_pressure_index": _round(_mean([row.get("water_pressure_index") for row in rows])),
+            "vegetation_support_index": _round(_mean([row.get("vegetation_support_index") for row in rows])),
+            "soil_moisture_proxy": _round(_mean([row.get("soil_moisture_proxy") for row in rows])),
+            "dryness_pressure_index": _round(_mean([row.get("dryness_pressure_index") for row in rows])),
+        }
+        for year, rows in sorted(annual.items())
+    ]
+
+
+def _monthly_normals(records: list[dict]) -> list[dict]:
+    monthly: dict[int, list[dict]] = {}
+    for row in records:
+        monthly.setdefault(int(row["month_index"]), []).append(row)
+    return [
+        {
+            "month_index": month,
+            "month": date(2024, month, 1).strftime("%b"),
+            "rainfall_mm": _round(_mean([row.get("rainfall_mm") for row in rows])),
+            "temperature_c": _round(_mean([row.get("temperature_c") for row in rows])),
+            "water_pressure_index": _round(_mean([row.get("water_pressure_index") for row in rows])),
+            "vegetation_support_index": _round(_mean([row.get("vegetation_support_index") for row in rows])),
+            "soil_moisture_proxy": _round(_mean([row.get("soil_moisture_proxy") for row in rows])),
+            "dryness_pressure_index": _round(_mean([row.get("dryness_pressure_index") for row in rows])),
+        }
+        for month, rows in sorted(monthly.items())
+    ]
+
+
+def _six_month_outlook(normals: list[dict]) -> list[dict]:
+    normal_by_month = {row["month_index"]: row for row in normals}
+    today = date.today()
+    outlook = []
+    for offset in range(1, 7):
+        month = ((today.month - 1 + offset) % 12) + 1
+        year = today.year + ((today.month - 1 + offset) // 12)
+        normal = normal_by_month.get(month, {})
+        outlook.append(
+            {
+                "date": date(year, month, 1).isoformat(),
+                "month": date(2024, month, 1).strftime("%b"),
+                "rainfall_mm": normal.get("rainfall_mm"),
+                "temperature_c": normal.get("temperature_c"),
+                "water_pressure_index": normal.get("water_pressure_index"),
+                "vegetation_support_index": normal.get("vegetation_support_index"),
+                "soil_moisture_proxy": normal.get("soil_moisture_proxy"),
+                "method": "historical monthly normal",
+            }
+        )
+    return outlook
+
+
+def _console_readiness(records: list[dict], scope: str) -> dict:
+    has_monthly = bool(records)
+    scope_text = "county" if scope == "county" else "national"
+    return {
+        "rainfall": {
+            "status": "live" if has_monthly else "source_required",
+            "metric": "Monthly rainfall history",
+            "source": "NASA POWER monthly point data",
+            "note": f"{scope_text.title()} monthly rainfall is populated from source records.",
+        },
+        "water": {
+            "status": "partial" if has_monthly else "source_required",
+            "metric": "Monthly water-pressure proxy",
+            "source": "NASA POWER rainfall, humidity, and temperature",
+            "note": "True surface-water extent still requires JRC Global Surface Water or Earth Engine NDWI zonal statistics.",
+        },
+        "vegetation": {
+            "status": "partial" if has_monthly else "source_required",
+            "metric": "Monthly vegetation-support proxy",
+            "source": "NASA POWER rainfall and temperature",
+            "note": "True NDVI/NDWI anomalies still require Sentinel/Landsat raster processing.",
+        },
+        "forest": {
+            "status": "partial" if has_monthly else "source_required",
+            "metric": "Monthly dryness-pressure proxy",
+            "source": "NASA POWER rainfall, temperature, and wind",
+            "note": "True forest cover/loss still requires ESA WorldCover or Earth Engine classification.",
+        },
+        "soil": {
+            "status": "partial" if has_monthly else "source_required",
+            "metric": "Monthly soil-moisture proxy",
+            "source": "NASA POWER rainfall, humidity, and temperature",
+            "note": "True soil properties should be connected through SoilGrids or verified soil-test uploads.",
+        },
+        "landuse": {
+            "status": "source_required",
+            "metric": "Land-use shares",
+            "source": "KNBS, ESA WorldCover, Sentinel/Landsat classification",
+            "note": "Monthly climate context is available, but land-use percentages must come from classified land-cover products.",
+        },
+        "roads": {
+            "status": "source_required",
+            "metric": "Road length and road surface",
+            "source": "Kenya Roads Board and OpenStreetMap QA extracts",
+            "note": "Monthly rainfall exposure is available, but road length/surface metrics need official or QA-reviewed OSM extraction.",
+        },
+        "county": {
+            "status": "live" if has_monthly else "source_required",
+            "metric": "Monthly county/national climate profile",
+            "source": "NASA POWER plus AEIS-K county boundaries",
+            "note": f"{scope_text.title()} monthly context is available for decision briefs.",
+        },
+    }
+
+
+def _normalise_history(history: dict, county_name: str | None = None) -> list[dict]:
+    rainfall_units = _parameter_units(history, "PRECTOTCORR")
+    return [_monthly_record(row, rainfall_units, county_name) for row in history.get("records", [])]
+
+
+def _aggregate_monthly_records(county_records: list[dict]) -> list[dict]:
+    grouped: dict[str, list[dict]] = {}
+    for row in county_records:
+        grouped.setdefault(str(row["date"]), []).append(row)
+    records = []
+    for date_key, rows in sorted(grouped.items()):
+        parsed = date.fromisoformat(date_key)
+        records.append(
+            {
+                "date": parsed.isoformat(),
+                "month": parsed.strftime("%b %Y"),
+                "year": parsed.year,
+                "month_index": parsed.month,
+                "county_count": len(rows),
+                "rainfall_mm": _round(_mean([row.get("rainfall_mm") for row in rows])),
+                "temperature_c": _round(_mean([row.get("temperature_c") for row in rows])),
+                "temperature_max_c": _round(_mean([row.get("temperature_max_c") for row in rows])),
+                "temperature_min_c": _round(_mean([row.get("temperature_min_c") for row in rows])),
+                "humidity_pct": _round(_mean([row.get("humidity_pct") for row in rows])),
+                "wind_ms": _round(_mean([row.get("wind_ms") for row in rows])),
+                "solar_mj_m2_day": _round(_mean([row.get("solar_mj_m2_day") for row in rows])),
+                "water_pressure_index": _round(_mean([row.get("water_pressure_index") for row in rows])),
+                "vegetation_support_index": _round(_mean([row.get("vegetation_support_index") for row in rows])),
+                "soil_moisture_proxy": _round(_mean([row.get("soil_moisture_proxy") for row in rows])),
+                "dryness_pressure_index": _round(_mean([row.get("dryness_pressure_index") for row in rows])),
+            }
+        )
+    return records
+
+
+def _monthly_intelligence_window(query) -> tuple[int, date, date]:
+    today = date.today()
+    try:
+        years = max(1, min(20, int(query.get("years", "20"))))
+    except ValueError as exc:
+        raise DataSourceError("years must be numeric.") from exc
+    provider_end = date(today.year - 1, 12, 31)
+    start = date(provider_end.year - years + 1, 1, 1)
+    return years, start, provider_end
+
+
+def monthly_intelligence(query) -> dict:
+    years, start, end = _monthly_intelligence_window(query)
+    county = str(query.get("county") or "").strip()
+    scope_key = county.lower() or "national"
+    cache_key = f"monthly-intelligence:{scope_key}:{start.isoformat()}:{end.isoformat()}:{','.join(MONTHLY_INTELLIGENCE_PARAMETERS)}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
+    common_query = {
+        "temporal": "monthly",
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "parameters": ",".join(MONTHLY_INTELLIGENCE_PARAMETERS),
+    }
+
+    source_errors = []
+    source_urls = []
+    if county:
+        history = nasa_power_history({**common_query, "county": county})
+        records = _normalise_history(history)
+        scope = "county"
+        scope_name = history["scope"]
+        center = {"latitude": history["latitude"], "longitude": history["longitude"]}
+        source_urls.append(history["source_url"])
+        aggregation = {
+            "method": "county centroid point",
+            "county_count": 1,
+            "warning": "This is a county-center climate time series, not an area-weighted zonal statistic.",
+        }
+    else:
+        county_names = domain.dashboard_county_names()
+        county_records: list[dict] = []
+
+        def fetch_county(name: str) -> dict:
+            return nasa_power_history({**common_query, "county": name})
+
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            futures = {executor.submit(fetch_county, name): name for name in county_names}
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    history = future.result()
+                    source_urls.append(history["source_url"])
+                    county_records.extend(_normalise_history(history, name))
+                except DataSourceError as exc:
+                    source_errors.append({"county": name, "error": str(exc), "status": exc.status})
+        if not county_records:
+            raise DataSourceError("National monthly aggregation could not load any county records from NASA POWER.", 503)
+        records = _aggregate_monthly_records(county_records)
+        scope = "national"
+        scope_name = "Kenya"
+        center = {"latitude": None, "longitude": None}
+        aggregation = {
+            "method": "mean of available county-centre monthly records",
+            "county_count": len({row["county"] for row in county_records if row.get("county")}),
+            "expected_county_count": len(county_names),
+            "warning": "National values are averaged from county-centre points. They are not area-weighted zonal statistics.",
+        }
+
+    annual = _annual_summaries(records)
+    normals = _monthly_normals(records)
+    latest = records[-1] if records else None
+    payload = {
+        "provider": "NASA POWER",
+        "source": "NASA Langley Research Center",
+        "source_type": "monthly_climate_intelligence",
+        "scope": scope,
+        "scope_name": scope_name,
+        "center": center,
+        "window_years": years,
+        "requested_start": start.isoformat(),
+        "requested_end": end.isoformat(),
+        "latest_available": latest["date"] if latest else None,
+        "earliest_available": records[0]["date"] if records else None,
+        "record_count": len(records),
+        "parameters": {
+            "rainfall_mm": "Monthly precipitation total estimated from NASA POWER PRECTOTCORR.",
+            "temperature_c": "Monthly mean 2 m air temperature.",
+            "humidity_pct": "Monthly mean relative humidity.",
+            "wind_ms": "Monthly mean wind speed.",
+            "water_pressure_index": "AEIS-K proxy from monthly rainfall, humidity, and temperature.",
+            "vegetation_support_index": "AEIS-K proxy from monthly rainfall and temperature.",
+            "soil_moisture_proxy": "AEIS-K proxy from monthly rainfall, humidity, and temperature.",
+            "dryness_pressure_index": "AEIS-K proxy from monthly water pressure, heat, and wind.",
+        },
+        "aggregation": aggregation,
+        "records": records,
+        "annual": annual,
+        "monthly_normals": normals,
+        "six_month_outlook": _six_month_outlook(normals),
+        "console_readiness": _console_readiness(records, scope),
+        "source_urls": source_urls[:5],
+        "source_error_count": len(source_errors),
+        "source_errors": source_errors[:12],
+        "source_note": "KMD and KALRO/KAOP are the preferred Kenya-local sources when connected. Rainfall and climate-derived proxy metrics are populated from NASA POWER as the open fallback. Water extent, NDVI/NDWI, forest cover, land-use shares, and road lengths remain source-gated until raster/vector zonal processing is connected.",
+        "generated_at": domain.now_iso(),
+    }
+    cache.set(cache_key, payload, 12 * 60 * 60)
+    return payload
 
 
 def sentinel_2_search(query) -> dict:

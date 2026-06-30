@@ -437,6 +437,41 @@ class AEISApiTests(TestCase):
         self.assertEqual(data["latest_available"], "2025-12-01")
 
     @patch("aeis_dashboard.services.data_sources.urlopen")
+    def test_monthly_intelligence_populates_county_console_series(self, mocked_urlopen):
+        token = self._ministry_token()
+        payload = {
+            "header": {"fill_value": -999.0},
+            "properties": {
+                "parameter": {
+                    "PRECTOTCORR": {"202401": 2.0, "202402": 3.0, "202501": 4.0},
+                    "T2M": {"202401": 24.0, "202402": 25.0, "202501": 26.0},
+                    "T2M_MAX": {"202401": 29.0, "202402": 30.0, "202501": 31.0},
+                    "T2M_MIN": {"202401": 19.0, "202402": 20.0, "202501": 21.0},
+                    "RH2M": {"202401": 75.0, "202402": 72.0, "202501": 70.0},
+                    "WS2M": {"202401": 2.5, "202402": 2.7, "202501": 3.1},
+                    "ALLSKY_SFC_SW_DWN": {"202401": 18.0, "202402": 18.5, "202501": 19.0},
+                }
+            },
+            "parameters": {
+                "PRECTOTCORR": {"units": "mm/day", "longname": "Precipitation Corrected"},
+                "T2M": {"units": "C", "longname": "Temperature at 2 Meters"},
+            },
+        }
+        mocked_urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(payload).encode("utf-8")
+        response = self.client.get(
+            "/api/data/intelligence/monthly?county=Mombasa&years=2",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["scope"], "county")
+        self.assertEqual(data["record_count"], 3)
+        self.assertEqual(data["records"][0]["rainfall_mm"], 62.0)
+        self.assertEqual(data["console_readiness"]["rainfall"]["status"], "live")
+        self.assertIn("kenya", data["source_note"].lower())
+        self.assertEqual(len(data["six_month_outlook"]), 6)
+
+    @patch("aeis_dashboard.services.data_sources.urlopen")
     def test_sentinel_catalogue_search_returns_source_metadata(self, mocked_urlopen):
         token = self._ministry_token()
         payload = {

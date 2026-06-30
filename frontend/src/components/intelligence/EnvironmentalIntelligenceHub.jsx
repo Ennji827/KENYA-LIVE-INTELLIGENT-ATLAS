@@ -29,21 +29,21 @@ const CONSOLES = [
     label: "Rainfall",
     icon: CloudRain,
     tone: "blue",
-    sourceSlugs: ["nasa-power", "open-meteo", "knbs-statistical-portals"],
+    sourceSlugs: ["kenya-meteorological-department", "kalro-kaop-weather", "nasa-power", "open-meteo"],
   },
   {
     id: "water",
     label: "Water",
     icon: Droplets,
     tone: "cyan",
-    sourceSlugs: ["jrc-global-surface-water", "google-earth-engine", "copernicus-sentinel-2"],
+    sourceSlugs: ["kenya-meteorological-department", "nasa-power", "jrc-global-surface-water", "google-earth-engine"],
   },
   {
     id: "vegetation",
     label: "Vegetation",
     icon: Leaf,
     tone: "green",
-    sourceSlugs: ["copernicus-sentinel-2", "usgs-landsat", "google-earth-engine"],
+    sourceSlugs: ["kalro-kaop-weather", "copernicus-sentinel-2", "usgs-landsat", "google-earth-engine"],
   },
   {
     id: "forest",
@@ -57,7 +57,7 @@ const CONSOLES = [
     label: "Soil health",
     icon: Sprout,
     tone: "amber",
-    sourceSlugs: ["isric-soilgrids", "open-meteo", "nasa-power"],
+    sourceSlugs: ["kalro-kaop-weather", "kenya-meteorological-department", "isric-soilgrids", "nasa-power"],
   },
   {
     id: "landuse",
@@ -78,7 +78,7 @@ const CONSOLES = [
     label: "County Intelligence",
     icon: MapPinned,
     tone: "blue",
-    sourceSlugs: ["open-meteo", "nasa-power", "copernicus-sentinel-2", "openstreetmap-roads"],
+    sourceSlugs: ["kenya-meteorological-department", "kalro-kaop-weather", "open-meteo", "nasa-power"],
   },
 ];
 
@@ -93,16 +93,80 @@ const LAND_USE_CLASSES = [
   { label: "All-weather roads", color: "#f97316", source: "Kenya Roads Board / OSM road classification" },
 ];
 
-function isoDate(value = new Date()) {
-  return value.toISOString().slice(0, 10);
-}
-
-function tenYearStart() {
-  const value = new Date();
-  value.setFullYear(value.getFullYear() - 10);
-  value.setMonth(0, 1);
-  return isoDate(value);
-}
+const CONSOLE_METRICS = {
+  rainfall: {
+    key: "rainfall_mm",
+    name: "Rainfall mm",
+    unit: "mm",
+    chartTitle: "Monthly rainfall history",
+    annualTitle: "Annual rainfall comparison",
+    color: "#2563eb",
+    fill: "#dbeafe",
+  },
+  water: {
+    key: "water_pressure_index",
+    name: "Water pressure index",
+    unit: "/100",
+    chartTitle: "Monthly water-pressure proxy",
+    annualTitle: "Annual water-pressure comparison",
+    color: "#0891b2",
+    fill: "#cffafe",
+  },
+  vegetation: {
+    key: "vegetation_support_index",
+    name: "Vegetation support index",
+    unit: "/100",
+    chartTitle: "Monthly vegetation-support proxy",
+    annualTitle: "Annual vegetation-support comparison",
+    color: "#16a34a",
+    fill: "#dcfce7",
+  },
+  forest: {
+    key: "dryness_pressure_index",
+    name: "Forest dryness pressure",
+    unit: "/100",
+    chartTitle: "Monthly forest dryness-pressure proxy",
+    annualTitle: "Annual forest dryness-pressure comparison",
+    color: "#b45309",
+    fill: "#ffedd5",
+  },
+  soil: {
+    key: "soil_moisture_proxy",
+    name: "Soil moisture proxy",
+    unit: "/100",
+    chartTitle: "Monthly soil-moisture proxy",
+    annualTitle: "Annual soil-moisture comparison",
+    color: "#d97706",
+    fill: "#fef3c7",
+  },
+  county: {
+    key: "rainfall_mm",
+    name: "Monthly climate profile",
+    unit: "mm",
+    chartTitle: "County/national monthly climate profile",
+    annualTitle: "Annual rainfall context",
+    color: "#1d4ed8",
+    fill: "#dbeafe",
+  },
+  landuse: {
+    key: "rainfall_mm",
+    name: "Rainfall exposure context",
+    unit: "mm",
+    chartTitle: "Monthly climate context for land-use planning",
+    annualTitle: "Annual rainfall exposure",
+    color: "#475569",
+    fill: "#e2e8f0",
+  },
+  roads: {
+    key: "rainfall_mm",
+    name: "Rainfall exposure context",
+    unit: "mm",
+    chartTitle: "Monthly climate context for road exposure",
+    annualTitle: "Annual rainfall exposure",
+    color: "#334155",
+    fill: "#e2e8f0",
+  },
+};
 
 function formatNumber(value, digits = 0) {
   const number = Number(value);
@@ -122,7 +186,7 @@ function annualRainfall(records = []) {
   records.forEach((row) => {
     const year = String(row.date || "").slice(0, 4);
     if (!year) return;
-    const rainfall = Number(row.PRECTOTCORR);
+    const rainfall = Number(row.rainfall_mm ?? row.PRECTOTCORR);
     if (!Number.isFinite(rainfall)) return;
     grouped.set(year, (grouped.get(year) || 0) + rainfall);
   });
@@ -134,11 +198,18 @@ function annualRainfall(records = []) {
     }));
 }
 
-function rainfallOutlook(records = []) {
+function rainfallOutlook(records = [], providerOutlook = []) {
+  if (providerOutlook?.some((row) => row.rainfall_mm != null || row.rainfall != null)) {
+    return providerOutlook.map((row) => ({
+      month: row.month,
+      rainfall: Number(row.rainfall_mm ?? row.rainfall),
+      method: row.method || "historical monthly normal",
+    }));
+  }
   const monthly = new Map();
   records.forEach((row) => {
     const month = Number(String(row.date || "").slice(5, 7));
-    const rainfall = Number(row.PRECTOTCORR);
+    const rainfall = Number(row.rainfall_mm ?? row.PRECTOTCORR);
     if (!month || !Number.isFinite(rainfall)) return;
     const bucket = monthly.get(month) || { total: 0, count: 0 };
     bucket.total += rainfall;
@@ -158,6 +229,37 @@ function rainfallOutlook(records = []) {
       method: "10-year monthly normal",
     };
   });
+}
+
+function annualMetric(records = [], metricKey) {
+  const grouped = new Map();
+  records.forEach((row) => {
+    const year = String(row.date || "").slice(0, 4);
+    const value = Number(row[metricKey]);
+    if (!year || !Number.isFinite(value)) return;
+    const bucket = grouped.get(year) || { total: 0, count: 0 };
+    bucket.total += value;
+    bucket.count += 1;
+    grouped.set(year, bucket);
+  });
+  return [...grouped.entries()]
+    .sort(([left], [right]) => Number(left) - Number(right))
+    .map(([year, bucket]) => ({
+      year,
+      value: Number((bucket.total / bucket.count).toFixed(1)),
+    }));
+}
+
+function monthlyMetricRows(records = [], metricKey) {
+  return records
+    .filter((row) => Number.isFinite(Number(row[metricKey])))
+    .slice(-60)
+    .map((row) => ({
+      month: row.month || String(row.date || "").slice(0, 7),
+      value: Number(Number(row[metricKey]).toFixed(1)),
+      rainfall_mm: row.rainfall_mm,
+      temperature_c: row.temperature_c,
+    }));
 }
 
 function average(values) {
@@ -209,10 +311,23 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
   const countyName = county?.name || "";
   const scopeLabel = countyName || "National command center";
   const rainfallRows = useMemo(() => annualRainfall(history?.records || []), [history]);
-  const outlookRows = useMemo(() => rainfallOutlook(history?.records || []), [history]);
+  const outlookRows = useMemo(
+    () => rainfallOutlook(history?.records || [], history?.six_month_outlook || []),
+    [history],
+  );
   const averageRain = average(rainfallRows.map((row) => row.rainfall));
   const latestRain = rainfallRows[rainfallRows.length - 1];
   const active = CONSOLES.find((consoleItem) => consoleItem.id === activeConsole) || CONSOLES[0];
+  const metricConfig = CONSOLE_METRICS[activeConsole] || CONSOLE_METRICS.rainfall;
+  const monthlyMetric = useMemo(
+    () => monthlyMetricRows(history?.records || [], metricConfig.key),
+    [history, metricConfig.key],
+  );
+  const annualMetricRows = useMemo(
+    () => annualMetric(history?.records || [], metricConfig.key),
+    [history, metricConfig.key],
+  );
+  const readiness = history?.console_readiness?.[activeConsole];
   const sourceBySlug = useMemo(() => {
     const map = new Map();
     (catalog?.sources || []).forEach((source) => map.set(source.slug, source));
@@ -228,32 +343,24 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
       setCatalog(catalogPayload);
 
       if (session?.token) {
-        const historyQuery = new URLSearchParams({
-          temporal: "monthly",
-          start: tenYearStart(),
-          end: isoDate(),
-          parameters: "PRECTOTCORR,T2M,RH2M,WS2M",
-        });
+        const historyQuery = new URLSearchParams({ years: "20" });
         if (countyName) {
           historyQuery.set("county", countyName);
-        } else {
-          historyQuery.set("latitude", "-0.0236");
-          historyQuery.set("longitude", "37.9062");
         }
-        const historyResponse = await fetch(`${apiBase}/api/data/history/nasa-power?${historyQuery}`, {
+        const historyResponse = await fetch(`${apiBase}/api/data/intelligence/monthly?${historyQuery}`, {
           headers: { Authorization: `Bearer ${session.token}` },
         });
         const historyPayload = await historyResponse.json();
-        if (!historyResponse.ok) throw new Error(historyPayload.error || "Unable to load rainfall history.");
+        if (!historyResponse.ok) throw new Error(historyPayload.error || "Unable to load monthly intelligence.");
         setHistory(historyPayload);
         setStatus(
           countyName
-            ? `10-year rainfall console loaded for ${countyName}.`
-            : "10-year rainfall console loaded from the Kenya central reference point. County aggregation is the next production step.",
+            ? `20-year monthly county intelligence loaded for ${countyName}.`
+            : "20-year monthly national intelligence loaded from aggregated county-centre records.",
         );
       } else {
         setHistory(null);
-        setStatus("Sign in to load 10-year rainfall history and the six-month historical outlook.");
+        setStatus("Sign in to load 20-year monthly intelligence and the six-month historical outlook.");
       }
     } catch (error) {
       setStatus(error.message || "Environmental intelligence sources could not be loaded.");
@@ -319,9 +426,9 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
           <em>{countyName ? "County-specific view" : "National reference view"}</em>
         </div>
         <div>
-          <span>10-year avg rain</span>
+          <span>20-year avg rain</span>
           <strong>{Number.isFinite(averageRain) ? `${formatNumber(averageRain, 0)} mm` : "--"}</strong>
-          <em>NASA POWER monthly</em>
+          <em>KMD/KALRO priority, NASA fallback</em>
         </div>
         <div>
           <span>Latest complete year</span>
@@ -330,8 +437,8 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
         </div>
         <div>
           <span>Source honesty</span>
-          <strong>{activeConsole === "rainfall" && rainfallRows.length ? "Live" : "Gated"}</strong>
-          <em>Unconnected metrics stay hidden</em>
+          <strong>{readiness?.status ? readiness.status.replace("_", " ") : "Gated"}</strong>
+          <em>{readiness?.source || "Unconnected metrics stay hidden"}</em>
         </div>
       </div>
 
@@ -340,7 +447,7 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
           <div className="aeis-env-chart-card">
             <div className="aeis-insight-panel-head">
               <div>
-                <strong>Rainfall console: last 10 years</strong>
+                <strong>Rainfall console: last 20 years</strong>
                 <span>{history?.earliest_available || "Start"} to {history?.latest_available || "latest complete month"}</span>
               </div>
               <CloudRain size={18} />
@@ -399,14 +506,52 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
             <div className="aeis-insight-panel-head">
               <div>
                 <strong>{active.label} console design</strong>
-                <span>Chart surfaces are ready; values stay blocked until source-backed data is connected.</span>
+                <span>{readiness?.note || "Climate context is populated; unsupported values stay blocked until source-backed data is connected."}</span>
               </div>
               <active.icon size={18} />
             </div>
+            {monthlyMetric.length ? (
+              <div className="aeis-env-mini-chart">
+                <div className="aeis-env-mini-chart-head">
+                  <strong>{metricConfig.chartTitle}</strong>
+                  <span>{metricConfig.name} {metricConfig.unit}</span>
+                </div>
+                <ResponsiveContainer width="100%" height={230}>
+                  <ComposedChart data={monthlyMetric} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#dbe7ef" />
+                    <XAxis dataKey="month" tick={{ fontSize: 10 }} minTickGap={22} />
+                    <YAxis tick={{ fontSize: 11 }} width={42} />
+                    <Tooltip />
+                    <Area dataKey="value" name={metricConfig.name} fill={metricConfig.fill} stroke={metricConfig.color} />
+                    <Line dataKey="value" name={metricConfig.name} stroke={metricConfig.color} strokeWidth={2.4} dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="aeis-insight-empty-chart">
+                <active.icon size={34} />
+                <strong>Monthly context not loaded yet.</strong>
+                <span>Connect a session and source records to populate this console.</span>
+              </div>
+            )}
+            {annualMetricRows.length ? (
+              <div className="aeis-env-annual-strip">
+                <strong>{metricConfig.annualTitle}</strong>
+                <div>
+                  {annualMetricRows.slice(-8).map((row) => (
+                    <span key={row.year}>
+                      <em>{row.year}</em>
+                      <b>{formatNumber(row.value, metricConfig.unit === "mm" ? 0 : 1)}</b>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {activeConsole === "water" && (
               <SourceGate
                 title="Water console metrics"
                 rows={[
+                  { metric: "Monthly water-pressure proxy", source: "KMD/KALRO preferred; NASA POWER fallback", status: readiness?.status || "Partial" },
                   { metric: "Surface-water extent by year", source: "JRC Global Surface Water / Sentinel-2 NDWI", status: "Source required" },
                   { metric: "Expansion or shrinkage trend", source: "JRC yearly history", status: "Source required" },
                   { metric: "County water stress signal", source: "Rainfall + NDWI + field validation", status: "Provider required" },
@@ -417,6 +562,7 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
               <SourceGate
                 title="Vegetation console metrics"
                 rows={[
+                  { metric: "Monthly vegetation-support proxy", source: "KMD/KALRO preferred; NASA POWER fallback", status: readiness?.status || "Partial" },
                   { metric: "NDVI time series", source: "Sentinel-2 / Landsat / GEE", status: "Raster tile required" },
                   { metric: "Vegetation anomaly", source: "10-year NDVI baseline", status: "Provider required" },
                   { metric: "County vegetation recovery", source: "NDVI + rainfall history", status: "Provider required" },
@@ -427,6 +573,7 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
               <SourceGate
                 title="Forest portal metrics"
                 rows={[
+                  { metric: "Monthly dryness-pressure proxy", source: "KMD/KALRO preferred; NASA POWER fallback", status: readiness?.status || "Partial" },
                   { metric: "Forest / tree-cover share", source: "ESA WorldCover / Sentinel", status: "Source required" },
                   { metric: "Forest loss or expansion", source: "Multi-year land-cover product", status: "Source required" },
                   { metric: "Fire / drought exposure", source: "Weather + vegetation dryness", status: "Provider required" },
@@ -437,6 +584,7 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
               <SourceGate
                 title="Soil health portal metrics"
                 rows={[
+                  { metric: "Monthly soil-moisture proxy", source: "KMD/KALRO preferred; NASA POWER fallback", status: readiness?.status || "Partial" },
                   { metric: "Soil organic carbon / texture", source: "ISRIC SoilGrids", status: "Source required" },
                   { metric: "Soil moisture condition", source: "Open-Meteo / satellite model", status: "Provider required" },
                   { metric: "County soil risk", source: "Soil + rainfall + land-use overlay", status: "Provider required" },
@@ -448,6 +596,7 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
                 <SourceGate
                   title="Land-use portal metrics"
                   rows={[
+                    { metric: "Monthly rainfall exposure context", source: "KMD/KALRO preferred; NASA POWER fallback", status: "Live context" },
                     { metric: "Housing / built-up land", source: "KNBS + ESA WorldCover + OSM", status: "Source required" },
                     { metric: "Cropland / forest / water shares", source: "ESA WorldCover + Sentinel/Landsat", status: "Source required" },
                     { metric: "Land-use change by county", source: "KNBS + annual land-cover products", status: "Source required" },
@@ -468,6 +617,7 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
               <SourceGate
                 title="Roads and infrastructure portal metrics"
                 rows={[
+                  { metric: "Monthly rainfall exposure context", source: "KMD/KALRO preferred; NASA POWER fallback", status: "Live context" },
                   { metric: "Tarmac road length", source: "Kenya Roads Board / OSM surface tags", status: "Source required" },
                   { metric: "All-weather road length", source: "Kenya Roads Board / OSM road classification", status: "Source required" },
                   { metric: "Access and exposure overlay", source: "Roads + rainfall + water extent + county boundaries", status: "Provider required" },
@@ -478,7 +628,8 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
               <SourceGate
                 title="County intelligence dashboard metrics"
                 rows={[
-                  { metric: "County climate profile", source: "Open-Meteo + NASA POWER + county boundary", status: countyName ? "Scoped" : "Select county" },
+                  { metric: "Monthly climate profile", source: "KMD/KALRO preferred; NASA POWER fallback", status: readiness?.status || "Live" },
+                  { metric: "County climate profile", source: "Open-Meteo + NASA POWER + county boundary", status: countyName ? "Scoped" : "National" },
                   { metric: "Sub-county and ward drill-down", source: "Official GIS boundary layers", status: "Ready" },
                   { metric: "County action brief", source: "Weather + imagery + field reports + reports", status: "Source gated" },
                 ]}
