@@ -107,7 +107,7 @@ def frontend_index(request: HttpRequest) -> HttpResponse:
     return api_json(
         {
             "project": "AEIS-K",
-            "name": "Agro-Environmental Intelligence System for Kenya",
+            "name": "Climate, Water and Land Intelligence System for Kenya",
             "status": "django_ready",
             "message": "Build the React frontend with npm --prefix frontend run build.",
         }
@@ -282,10 +282,13 @@ def metadata(request: HttpRequest) -> JsonResponse:
                 "storage": "django_orm",
             },
             "analysis_layers": [
-                "crop_health",
+                "vegetation_health",
                 "soil_moisture",
-                "crop_strength",
+                "vegetation_strength",
                 "land_use",
+                "water_extent",
+                "forest_cover",
+                "roads",
                 "ndbi",
                 "ndwi",
                 "google_earth_engine_ready",
@@ -293,8 +296,6 @@ def metadata(request: HttpRequest) -> JsonResponse:
                 "nasa_power_history",
                 "copernicus_sentinel_catalogue",
                 "usgs_landsat_latest",
-                "forest_trend",
-                "roads",
             ],
         }
     )

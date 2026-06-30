@@ -1,4 +1,5 @@
-import React, { lazy, Suspense } from "react";
+import React from "react";
+import { BarChart3 } from "lucide-react";
 import CountyFilter from "../components/CountyFilter";
 import CropHealthPanel from "../components/CropHealthPanel";
 import FertilizerPanel from "../components/FertilizerPanel";
@@ -11,19 +12,14 @@ import StatCard from "../components/StatCard";
 import FieldReportsPanel from "../components/FieldReportsPanel";
 import { getDashboardKpis, kenyaCounties } from "../data/kenyaCountyCatalog";
 
-const EnvironmentalIntelligenceHub = lazy(() => import("../components/EnvironmentalIntelligenceHub"));
-
-function WorkspaceLoading() {
-  return (
-    <div className="aeis-card aeis-card-pad aeis-workspace-loading" role="status">
-      <span className="aeis-skeleton wide" />
-      <span className="aeis-skeleton" />
-      <span className="aeis-skeleton short" />
-    </div>
-  );
-}
-
-export default function CountyDashboard({ filter, setFilter, selectedCounty, lockedCounty, session, onAskAssistant }) {
+export default function CountyDashboard({
+  filter,
+  setFilter,
+  selectedCounty,
+  lockedCounty,
+  session,
+  onOpenIntelligenceHub,
+}) {
   if (!selectedCounty) {
     return (
       <>
@@ -32,7 +28,7 @@ export default function CountyDashboard({ filter, setFilter, selectedCounty, loc
             <div className="aeis-kicker">County dashboard</div>
             <h1 className="aeis-title">Select a County Workspace</h1>
             <p className="aeis-subtitle">
-              The county dashboard is isolated by county. Search and select a county code or county name to open its specific rainfall, crop health, registry, and fertilizer intelligence.
+              The county dashboard is isolated by county. Search and select a county code or county name to open its specific rainfall, water, vegetation, land-use, soil, road, and registry intelligence.
             </p>
           </div>
           <div className="aeis-status-pill">National command center active</div>
@@ -52,7 +48,7 @@ export default function CountyDashboard({ filter, setFilter, selectedCounty, loc
           <div className="aeis-kicker">County dashboard</div>
           <h1 className="aeis-title">{filter.county} County Intelligence</h1>
           <p className="aeis-subtitle">
-            County workspace with real boundaries, live forecast below the map, and source-required gates for NDVI, NDWI, crop stress, land cover, farmer registry, and fertilizer demand.
+            County workspace with real boundaries, live forecast below the map, and source-required gates for rainfall, NDVI, NDWI, water, vegetation stress, land cover, field/site registry, soil, and roads.
           </p>
         </div>
         <div className="aeis-status-pill">{filter.subcounty || "All sub-counties"} / {filter.ward || "All wards"}</div>
@@ -68,13 +64,19 @@ export default function CountyDashboard({ filter, setFilter, selectedCounty, loc
       </div>
 
       <div style={{ height: 16 }} />
-      <Suspense fallback={<WorkspaceLoading />}>
-        <EnvironmentalIntelligenceHub
-          session={session}
-          county={selectedCounty}
-          onOpenAssistant={onAskAssistant}
-        />
-      </Suspense>
+      <section className="aeis-card aeis-card-pad aeis-county-hub-cta">
+        <div>
+          <span className="aeis-kicker">Deep intelligence</span>
+          <h2>Open the county consoles when you need the heavy analysis</h2>
+          <p>
+            Rainfall history, water, vegetation, forest, soil, land-use, roads, and county action briefs
+            now live in the Intelligence Hub so this dashboard stays fast and easy to read.
+          </p>
+        </div>
+        <button type="button" className="aeis-btn" onClick={onOpenIntelligenceHub}>
+          <BarChart3 size={16} /> Open Intelligence Hub
+        </button>
+      </section>
 
       <div style={{ height: 16 }} />
       <CountyIntelligenceBrief county={selectedCounty} />
@@ -96,7 +98,7 @@ export default function CountyDashboard({ filter, setFilter, selectedCounty, loc
           <RealtimeOperationsFeed countyName={selectedCounty.name} />
           <RemoteSensingImageryPanel county={selectedCounty} />
           <DataAuthorityPanel county={selectedCounty} />
-          <CropHealthPanel stats={stats} title="County Crop Stress" />
+          <CropHealthPanel stats={stats} title="County Vegetation Stress" />
         </div>
       </div>
     </>

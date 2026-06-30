@@ -7271,6 +7271,101 @@ body {
   padding: 0 12px 12px;
 }
 
+.aeis-hub-directory {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.1), transparent 34%),
+    #ffffff;
+}
+
+.aeis-hub-directory-head,
+.aeis-county-hub-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.aeis-hub-directory-head h2,
+.aeis-county-hub-cta h2 {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: clamp(18px, 2vw, 24px);
+  letter-spacing: -0.03em;
+}
+
+.aeis-county-hub-cta p {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: #64748b;
+  line-height: 1.55;
+}
+
+.aeis-hub-console-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+.aeis-hub-console-grid button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 10px;
+  align-items: start;
+  min-height: 118px;
+  border: 1px solid #dce7ef;
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.88);
+  color: #0f172a;
+  cursor: pointer;
+  padding: 14px;
+  text-align: left;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.aeis-hub-console-grid button:hover,
+.aeis-hub-console-grid button.active {
+  transform: translateY(-1px);
+  border-color: rgba(20, 184, 166, 0.46);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+}
+
+.aeis-hub-console-grid button.active {
+  background: linear-gradient(135deg, #ecfeff, #f0fdf4);
+}
+
+.aeis-hub-console-grid span {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 13px;
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.aeis-hub-console-grid strong {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.aeis-hub-console-grid em {
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.aeis-county-hub-cta {
+  background:
+    radial-gradient(circle at top left, rgba(34, 197, 94, 0.12), transparent 34%),
+    #ffffff;
+}
+
 @media (max-width: 1220px) {
   .aeis-workspace-grid {
     grid-template-columns: 1fr;
@@ -7350,7 +7445,7 @@ body {
 
 .aeis-env-console-tabs {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
   gap: 10px;
   padding: 16px 20px 0;
 }
@@ -7578,6 +7673,18 @@ body {
 }
 
 @media (max-width: 720px) {
+  .aeis-hub-directory-head,
+  .aeis-county-hub-cta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .aeis-hub-directory-head .aeis-btn,
+  .aeis-county-hub-cta .aeis-btn {
+    justify-content: center;
+    width: 100%;
+  }
+
   .aeis-env-head,
   .aeis-env-gate-row {
     grid-template-columns: 1fr;

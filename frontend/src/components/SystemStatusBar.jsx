@@ -71,6 +71,7 @@ export default function SystemStatusBar({
     if (!needle) return [];
     const allPageOptions = [
       ["home", "National dashboard"],
+      ["intelligence-hub", "Intelligence Hub"],
       ["map", "Map intelligence"],
       ["intelligence", "Intelligence Assistant"],
       ["county", "County dashboard"],
@@ -82,7 +83,7 @@ export default function SystemStatusBar({
     const pageOptions = allPageOptions.filter(([id]) => {
       if (role === "analyst") return id !== "admin";
       if (role === "auditor") return ["home", "reports", "admin"].includes(id);
-      if (role === "farmer") return ["home", "map", "intelligence"].includes(id);
+      if (role === "farmer") return ["home", "intelligence-hub", "map", "intelligence"].includes(id);
       if (["county", "field_officer"].includes(role)) return !["admin", "county-sites"].includes(id);
       return true;
     });

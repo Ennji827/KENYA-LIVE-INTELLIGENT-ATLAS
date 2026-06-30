@@ -18,7 +18,7 @@ export default function TopBar() {
         backdropFilter: "blur(10px)",
       }}
     >
-      <div>🌍 AEIS-K | Agricultural Intelligence System</div>
+      <div>🌍 AEIS-K | Climate, Water & Land Intelligence</div>
 
       <div style={{ fontSize: "12px", opacity: 0.9 }}>
         LIVE GIS DASHBOARD

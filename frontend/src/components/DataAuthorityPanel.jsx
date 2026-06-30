@@ -9,7 +9,7 @@ const nationalSources = [
   { label: "Latest Landsat", status: "Connected", note: "USGS LandsatLook Collection 2 catalogue and browse overlay" },
   { label: "NDVI/NDWI rasters", status: "Provider required", note: "Use NASA for visual context; connect GEE/Sentinel/Landsat for official county rasters" },
   { label: "Google Earth Engine", status: "Checking", note: "Backend GEE configuration status" },
-  { label: "Farmer registry", status: "Source required", note: "Connect verified county farmer records" },
+  { label: "Field/site registry", status: "Source required", note: "Connect verified county field/site records" },
 ];
 
 function sourceRows(county) {
@@ -63,7 +63,7 @@ export default function DataAuthorityPanel({ county = null }) {
     <div className="aeis-card aeis-card-pad">
       <h2 className="aeis-section-title">Data Authority and Readiness</h2>
       <p className="aeis-section-copy">
-        AEIS-K separates loaded operational data from provider gaps so only source-backed outputs are treated as official.
+        AEIS-K separates loaded operational data from provider gaps so only source-backed climate, water, land, road, soil, and field outputs are treated as official.
       </p>
       <div className="aeis-authority-list">
         {rows.map((source) => (

@@ -11,7 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { Bot, CloudRain, DatabaseZap, Leaf, RefreshCw, Satellite } from "lucide-react";
-import { getApiBase } from "../utils/api";
+import { getApiBase } from "../../utils/api";
 
 function isoDate(value = new Date()) {
   return value.toISOString().slice(0, 10);

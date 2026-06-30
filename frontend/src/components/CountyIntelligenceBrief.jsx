@@ -20,7 +20,7 @@ export default function CountyIntelligenceBrief({ county }) {
         <div>
           <h2 className="aeis-section-title">{county.name} Intelligence Brief</h2>
           <p className="aeis-section-copy">
-            Source-readiness summary for county boundaries, live forecast, NDVI/NDWI rasters, farmer registry, and land-cover inputs.
+            Source-readiness summary for county boundaries, live forecast, rainfall history, NDVI/NDWI rasters, water, land-cover, road, soil, and field/site inputs.
           </p>
         </div>
         <div className={`aeis-priority-badge ${tone}`}>{intelligence.priority}</div>

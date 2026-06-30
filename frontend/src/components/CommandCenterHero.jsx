@@ -1,6 +1,7 @@
 import React from "react";
 import {
   ArrowRight,
+  BarChart3,
   Bot,
   CalendarDays,
   CloudSun,
@@ -37,12 +38,13 @@ export default function CommandCenterHero({
   const role = session?.role;
   const allActions = [
     { id: "map", label: "Explore map", copy: "Inspect boundaries and imagery", icon: Map },
+    { id: "intelligence-hub", label: "Open Intelligence Hub", copy: "Rainfall, water, land and roads", icon: BarChart3 },
     { id: "intelligence", label: "Ask intelligence", copy: "Run evidence-backed analysis", icon: Bot },
     { id: "county-sites", label: "County directory", copy: "Compare county workspaces", icon: Satellite },
   ];
   const actions = allActions.filter((action) => {
     if (role === "auditor") return false;
-    if (role === "farmer") return ["map", "intelligence"].includes(action.id);
+    if (role === "farmer") return ["map", "intelligence-hub", "intelligence"].includes(action.id);
     if (["county", "field_officer"].includes(role)) return action.id !== "county-sites";
     if (role === "analyst") return action.id !== "admin";
     return true;

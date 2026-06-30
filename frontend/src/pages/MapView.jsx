@@ -292,7 +292,7 @@ export default function MapView({ filter, setFilter, lockedCounty = "" }) {
             type="button"
             className={drawMode ? "active" : ""}
             onClick={() => setDrawMode((value) => !value)}
-            title="Draw a farm boundary"
+            title="Draw a field/site boundary"
           >
             <PencilRuler size={17} /> Farm
           </button>

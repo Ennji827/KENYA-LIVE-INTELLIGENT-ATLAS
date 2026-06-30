@@ -5,7 +5,7 @@ function providerText(connected) {
   return connected ? "Connected" : "Source required";
 }
 
-export default function CropHealthPanel({ title = "Crop Health" }) {
+export default function CropHealthPanel({ title = "Vegetation Health" }) {
   const [geeStatus, setGeeStatus] = useState(null);
 
   useEffect(() => {
@@ -28,13 +28,13 @@ export default function CropHealthPanel({ title = "Crop Health" }) {
   const layers = geeStatus?.layers || {};
   const ndviConnected = Boolean(layers.geeNdvi?.configured);
   const ndwiConnected = Boolean(layers.geeNdwi?.configured);
-  const cropHealthReady = ndviConnected && ndwiConnected;
+  const vegetationHealthReady = ndviConnected && ndwiConnected;
 
   return (
     <div className="aeis-card aeis-card-pad">
       <h2 className="aeis-section-title">{title}</h2>
       <p className="aeis-section-copy">
-        Crop-health decisions are hidden until AEIS-K receives source-dated NDVI and NDWI rasters from GEE, Sentinel/Landsat, UAV, or another approved provider.
+        Vegetation-health decisions are hidden until AEIS-K receives source-dated NDVI and NDWI rasters from GEE, Sentinel/Landsat, UAV, or another approved provider.
       </p>
       <div className="aeis-metric-list">
         <div className="aeis-metric-row">
@@ -46,18 +46,18 @@ export default function CropHealthPanel({ title = "Crop Health" }) {
           <strong>{providerText(ndwiConnected)}</strong>
         </div>
         <div className="aeis-metric-row">
-          <span>Crop stress score</span>
-          <strong>{cropHealthReady ? "Ready for provider calculation" : "Blocked"}</strong>
+          <span>Vegetation stress score</span>
+          <strong>{vegetationHealthReady ? "Ready for provider calculation" : "Blocked"}</strong>
         </div>
         <div className="aeis-metric-row">
           <span>Decision status</span>
-          <strong>{cropHealthReady ? "Use connected rasters" : "Do not publish"}</strong>
+          <strong>{vegetationHealthReady ? "Use connected rasters" : "Do not publish"}</strong>
         </div>
       </div>
       <div className="aeis-index-decision compact">
         <h3 className="aeis-mini-heading">Real Data Rule</h3>
         <p>
-          AEIS-K will not show NDVI/NDWI crop-health values without a source raster. Connect raster source URLs and acquisition metadata before county or farm crop-stress decisions are displayed.
+          AEIS-K will not show NDVI/NDWI vegetation-health values without a source raster. Connect raster source URLs and acquisition metadata before county, water, forest, land-use, or field decisions are displayed.
         </p>
       </div>
     </div>

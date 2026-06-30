@@ -14,10 +14,10 @@ export default function FarmerDashboard({ filter, setFilter, lockedCounty, sessi
       <>
         <div className="aeis-topbar">
           <div>
-            <div className="aeis-kicker">Farmer dashboard</div>
-            <h1 className="aeis-title">Select a County for Farm Support</h1>
+            <div className="aeis-kicker">Field dashboard</div>
+            <h1 className="aeis-title">Select a County for Field Support</h1>
             <p className="aeis-subtitle">
-              Farm decision support requires verified farm boundaries and a county farmer registry.
+              Field decision support requires verified site boundaries and a county field/site registry.
             </p>
           </div>
           <div className="aeis-status-pill">No county selected</div>
@@ -31,10 +31,10 @@ export default function FarmerDashboard({ filter, setFilter, lockedCounty, sessi
     <>
       <div className="aeis-topbar">
         <div>
-          <div className="aeis-kicker">Farmer dashboard</div>
-          <h1 className="aeis-title">{filter.county} Farm Decision Support</h1>
+          <div className="aeis-kicker">Field dashboard</div>
+          <h1 className="aeis-title">{filter.county} Field Decision Support</h1>
           <p className="aeis-subtitle">
-            Farm-level values are hidden until verified farm boundaries, registry records, and source-dated crop-health rasters are connected.
+            Field/site-level values are hidden until verified boundaries, registry records, and source-dated vegetation/water rasters are connected.
           </p>
         </div>
         <div className="aeis-status-pill">{selectedCounty?.displayName || filter.county}</div>
@@ -44,9 +44,9 @@ export default function FarmerDashboard({ filter, setFilter, lockedCounty, sessi
 
       <div style={{ height: 16 }} />
       <div className="aeis-grid aeis-kpi-grid">
-        <StatCard label="Farm Boundary" value="Source required" tone="navy" />
-        <StatCard label="Farmer Registry" value="Source required" tone="green" />
-        <StatCard label="Farm Health" value="Blocked" note="Requires real NDVI/NDWI" tone="amber" />
+        <StatCard label="Site Boundary" value="Source required" tone="navy" />
+        <StatCard label="Field Registry" value="Source required" tone="green" />
+        <StatCard label="Vegetation Health" value="Blocked" note="Requires real NDVI/NDWI" tone="amber" />
         <StatCard label="Weather Advisory" value="Live forecast" note="Shown below map" tone="blue" />
       </div>
 
@@ -61,15 +61,15 @@ export default function FarmerDashboard({ filter, setFilter, lockedCounty, sessi
       <div style={{ height: 16 }} />
       <div className="aeis-grid aeis-two-col">
         <div className="aeis-grid">
-          <CropHealthPanel title={`${filter.county} Farm Health Status`} />
+          <CropHealthPanel title={`${filter.county} Field Vegetation Status`} />
           <div className="aeis-card aeis-card-pad">
-            <h2 className="aeis-section-title">Verified Farm Inputs</h2>
+            <h2 className="aeis-section-title">Verified Field Inputs</h2>
             <p className="aeis-section-copy">
-              AEIS-K will not show farm-level advisory values until these records are connected from real county or farmer sources.
+              AEIS-K will not show field/site-level advisory values until these records are connected from real county or field sources.
             </p>
             <div className="aeis-metric-list">
-              <div className="aeis-metric-row"><span>Farm boundary</span><strong>Source required</strong></div>
-              <div className="aeis-metric-row"><span>Crop type / stage</span><strong>Source required</strong></div>
+              <div className="aeis-metric-row"><span>Site boundary</span><strong>Source required</strong></div>
+              <div className="aeis-metric-row"><span>Land-use class / activity</span><strong>Source required</strong></div>
               <div className="aeis-metric-row"><span>Soil test</span><strong>Source required</strong></div>
               <div className="aeis-metric-row"><span>Field verification</span><strong>Source required</strong></div>
             </div>
@@ -78,7 +78,7 @@ export default function FarmerDashboard({ filter, setFilter, lockedCounty, sessi
         <div className="aeis-grid">
           <FertilizerPanel countyName={filter.county} />
           <div className="aeis-card aeis-card-pad">
-            <h2 className="aeis-section-title">Farmer Advisory</h2>
+            <h2 className="aeis-section-title">Field Advisory</h2>
             <div className="aeis-metric-list">
               <div className="aeis-metric-row">
                 <span>County / Ward</span>
@@ -89,7 +89,7 @@ export default function FarmerDashboard({ filter, setFilter, lockedCounty, sessi
                 <strong>Use live forecast below map</strong>
               </div>
               <div className="aeis-metric-row">
-                <span>Fertilizer recommendation</span>
+                <span>Soil/input recommendation</span>
                 <strong>Blocked until verified inputs</strong>
               </div>
               <div className="aeis-metric-row">

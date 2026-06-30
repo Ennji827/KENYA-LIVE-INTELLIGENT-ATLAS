@@ -5,7 +5,7 @@ import { cancelJob, waitForJob } from "../utils/processingJobs";
 
 const starterQuestions = [
   "Which counties have the lowest rainfall forecast and need verification?",
-  "Summarize crop and climate conditions in Nyandarua.",
+  "Summarize rainfall, water, vegetation, and land conditions in Nyandarua.",
   "Which wards need field verification?",
   "Generate a Ministry intelligence brief.",
 ];
@@ -35,7 +35,7 @@ export default function IntelligenceAssistant({ session, filter, initialQuestion
   const [history, setHistory] = useState([]);
   const [busy, setBusy] = useState(false);
   const [activeJob, setActiveJob] = useState(null);
-  const [message, setMessage] = useState("Ask a source-grounded question about agriculture, climate, GIS, or field operations.");
+  const [message, setMessage] = useState("Ask a source-grounded question about rainfall, water, vegetation, land use, roads, soil, GIS, or field operations.");
 
   const headers = { Authorization: `Bearer ${session.token}` };
 

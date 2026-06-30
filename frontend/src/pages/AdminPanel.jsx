@@ -40,7 +40,7 @@ export default function AdminPanel({ selectedCounty, alerts, reports, session })
           <div className="aeis-kicker">Admin / Ministry panel</div>
           <h1 className="aeis-title">AEIS-K Ministry Operations</h1>
           <p className="aeis-subtitle">
-            Manage users, verify farms, view county summaries, fertilizer planning data, crop stress alerts, and report generation workflows.
+            Manage users, verify field/site records, view county summaries, soil/input planning data, vegetation stress alerts, and report generation workflows.
           </p>
         </div>
         <div className="aeis-status-pill">Ministry view</div>
@@ -69,8 +69,8 @@ export default function AdminPanel({ selectedCounty, alerts, reports, session })
                   <th>County</th>
                   <th>Registry</th>
                   <th>NDVI</th>
-                  <th>Crop stress</th>
-                  <th>Fertilizer</th>
+                  <th>Vegetation stress</th>
+                  <th>Soil/input</th>
                 </tr>
               </thead>
               <tbody>

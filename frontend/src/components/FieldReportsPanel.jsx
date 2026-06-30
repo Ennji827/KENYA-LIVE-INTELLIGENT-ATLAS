@@ -113,7 +113,7 @@ export default function FieldReportsPanel({ session, countyName, subcountyName =
       {canSubmit && (
         <form className="aeis-field-report-form" onSubmit={submit}>
           <input required placeholder="Observation title" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
-          <input placeholder="Crop type" value={form.crop_type} onChange={(event) => setForm({ ...form, crop_type: event.target.value })} />
+          <input placeholder="Land use / observed activity" value={form.crop_type} onChange={(event) => setForm({ ...form, crop_type: event.target.value })} />
           <input placeholder="Sub-county" value={form.subcounty_name} onChange={(event) => setForm({ ...form, subcounty_name: event.target.value })} />
           <input placeholder="Ward" value={form.ward_name} onChange={(event) => setForm({ ...form, ward_name: event.target.value })} />
           <input type="date" value={form.observation_date} onChange={(event) => setForm({ ...form, observation_date: event.target.value })} />

@@ -16,7 +16,8 @@ import KsaPoweredBy from "./KsaPoweredBy";
 import SystemStatusBar from "./SystemStatusBar";
 
 const navItems = [
-  { id: "home", label: "Climate Command", icon: LayoutDashboard },
+  { id: "home", label: "Home Dashboard", icon: LayoutDashboard },
+  { id: "intelligence-hub", label: "Intelligence Hub", icon: BarChart3 },
   { id: "map", label: "Map Intelligence", icon: Map },
   { id: "intelligence", label: "Intelligence Assistant", icon: Bot },
   { id: "county", label: "County Dashboard", icon: MapPinned },
@@ -33,7 +34,7 @@ function allowedNavItems(session) {
       .map((item) => (item.id === "admin" ? { ...item, label: "Audit / Data Quality" } : item));
   }
   if (session?.role === "farmer") {
-    return navItems.filter((item) => ["home", "map", "intelligence", "farmer"].includes(item.id));
+    return navItems.filter((item) => ["home", "intelligence-hub", "map", "intelligence", "farmer"].includes(item.id));
   }
   if (session?.role === "field_officer") {
     return navItems.filter((item) => !["admin", "county-sites"].includes(item.id));

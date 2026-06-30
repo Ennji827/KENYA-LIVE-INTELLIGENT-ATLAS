@@ -35,12 +35,45 @@ const CountyDashboard = lazy(() => import("./CountyDashboard"));
 const FarmerDashboard = lazy(() => import("./FarmerDashboard"));
 const Reports = lazy(() => import("./Reports"));
 const IntelligenceAssistant = lazy(() => import("./IntelligenceAssistant"));
+const IntelligenceHub = lazy(() => import("./IntelligenceHub"));
 const AdminPanel = lazy(() => import("./AdminPanel"));
 const CountySites = lazy(() => import("./CountySites"));
 const PersistentMapPanel = lazy(() => import("../components/PersistentMapPanel"));
 const LiveWeatherForecastPanel = lazy(() => import("../components/LiveWeatherForecastPanel"));
-const ClimateInsightStudio = lazy(() => import("../components/ClimateInsightStudio"));
-const EnvironmentalIntelligenceHub = lazy(() => import("../components/EnvironmentalIntelligenceHub"));
+
+const PAGE_PATHS = {
+  home: "/",
+  map: "/map",
+  "intelligence-hub": "/intelligence-hub",
+  intelligence: "/intelligence-assistant",
+  county: "/county",
+  farmer: "/field-dashboard",
+  reports: "/reports",
+  "county-sites": "/county-sites",
+  admin: "/admin",
+};
+
+const PAGE_BY_PATH = {
+  "/": "home",
+  "/dashboard": "home",
+  "/map": "map",
+  "/intelligence": "intelligence-hub",
+  "/intelligence-hub": "intelligence-hub",
+  "/intelligence-assistant": "intelligence",
+  "/assistant": "intelligence",
+  "/county": "county",
+  "/field-dashboard": "farmer",
+  "/farmer": "farmer",
+  "/reports": "reports",
+  "/county-sites": "county-sites",
+  "/admin": "admin",
+};
+
+function pageFromLocation() {
+  if (typeof window === "undefined") return "home";
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  return PAGE_BY_PATH[path] || "home";
+}
 
 function WorkspaceLoading() {
   return (
@@ -94,22 +127,22 @@ function CommandCenterOverview({ dashboardData }) {
 }
 
 function insightForKpi(label) {
-  if (label === "Registered Farms" || label === "Total Mapped Area") return "farmers";
+  if (label === "Verified Sites" || label === "Mapped Land Area") return "sites";
   if (label === "Average NDVI") return "imagery";
   if (label === "Rainfall Risk") return "rainfall";
-  if (label === "Crop Stress Level") return "stress";
-  if (label === "Fertilizer Demand") return "fertilizer";
+  if (label === "Vegetation Stress") return "stress";
+  if (label === "Soil/Input Demand") return "soil";
   if (["Cropland %", "Bare Land %", "Built-up Area %", "Grassland %"].includes(label)) return "landcover";
   return null;
 }
 
 function OperationsContext({ activeInsight, county, stats }) {
   const context = {
-    farmers: {
-      title: "County Farmer Registry Context",
-      copy: `${county.name} farmer registry values are hidden until a verified county registry source is connected.`,
+    sites: {
+      title: "County Field and Site Registry Context",
+      copy: `${county.name} field/site registry values are hidden until a verified county registry source is connected.`,
       rows: [
-        ["Registered farms", "Source required"],
+        ["Verified sites", "Source required"],
         ["Mapped area", "Source required"],
         ["Registry status", "Connect verified county source"],
       ],
@@ -124,8 +157,8 @@ function OperationsContext({ activeInsight, county, stats }) {
       ],
     },
     stress: {
-      title: "Crop Stress Operations",
-      copy: `Crop stress for ${county.name} is blocked until source-dated NDVI/NDWI rasters and field validation inputs are connected.`,
+      title: "Vegetation Stress Operations",
+      copy: `Vegetation stress for ${county.name} is blocked until source-dated NDVI/NDWI rasters and field validation inputs are connected.`,
       rows: [
         ["Average NDVI", "Provider required"],
         ["Stress level", "Blocked"],
@@ -141,12 +174,12 @@ function OperationsContext({ activeInsight, county, stats }) {
         ["GEE NDWI tile", "Configure provider"],
       ],
     },
-    fertilizer: {
-      title: "Fertilizer Planning Context",
-      copy: `Fertilizer planning for ${county.name} is hidden until verified registry, acreage, crop stage, soil, and rainfall data are connected.`,
+    soil: {
+      title: "Soil and Input Planning Context",
+      copy: `Soil/input planning for ${county.name} is hidden until verified registry, mapped area, land-use class, soil, and rainfall data are connected.`,
       rows: [
         ["Demand", "Source required"],
-        ["Registered farms", "Source required"],
+        ["Verified sites", "Source required"],
         ["Mapped area", "Source required"],
       ],
     },
@@ -191,9 +224,8 @@ function DashboardHome({
   updatedAt,
   onRefresh,
   onNavigate,
-  onAskAssistant,
 }) {
-  const [activeInsight, setActiveInsight] = useState("farmers");
+  const [activeInsight, setActiveInsight] = useState("sites");
   const selectedCounty = getCountyByName(filter.county);
   const stats = selectedCounty?.stats;
   const heroKpis = selectedCounty
@@ -240,24 +272,6 @@ function DashboardHome({
       <CountyFilter counties={kenyaCounties} value={filter} onChange={setFilter} lockedCounty={lockedCounty} />
 
       <div style={{ height: 16 }} />
-      <Suspense fallback={<WorkspaceLoading />}>
-        <EnvironmentalIntelligenceHub
-          session={session}
-          county={selectedCounty}
-          onOpenAssistant={onAskAssistant}
-        />
-      </Suspense>
-
-      <div style={{ height: 16 }} />
-      <Suspense fallback={<WorkspaceLoading />}>
-        <ClimateInsightStudio
-          session={session}
-          county={selectedCounty}
-          onOpenAssistant={onAskAssistant}
-        />
-      </Suspense>
-
-      <div style={{ height: 16 }} />
       <div className="aeis-grid aeis-two-col">
         <div className="aeis-grid">
           {selectedCounty ? (
@@ -286,7 +300,7 @@ function DashboardHome({
                 <summary>Advanced source gates and planning tools</summary>
                 <div className="aeis-grid aeis-secondary-details-body">
                   <DataAuthorityPanel county={selectedCounty} />
-                  <CropHealthPanel stats={stats} title={`${filter.county} Crop Health`} />
+                  <CropHealthPanel stats={stats} title={`${filter.county} Vegetation Health`} />
                   <FertilizerPanel stats={stats} countyName={filter.county} />
                 </div>
               </details>
@@ -305,7 +319,7 @@ export default function Dashboard() {
   const [authReady, setAuthReady] = useState(false);
   const [session, setSession] = useState(null);
   const [portalView, setPortalView] = useState("landing"); // landing | signin | register
-  const [activePage, setActivePage] = useState("home");
+  const [activePage, setActivePageState] = useState(pageFromLocation);
   const [filter, setFilter] = useState({
     county: "",
     subcounty: "",
@@ -317,6 +331,21 @@ export default function Dashboard() {
   const [dashboardStatus, setDashboardStatus] = useState("loading");
   const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState(null);
   const [assistantDraft, setAssistantDraft] = useState("");
+
+  const setActivePage = useCallback((pageId, options = {}) => {
+    setActivePageState(pageId);
+    if (typeof window === "undefined") return;
+    const path = PAGE_PATHS[pageId] || "/";
+    if (window.location.pathname === path) return;
+    const method = options.replace ? "replaceState" : "pushState";
+    window.history[method]({ pageId }, "", path);
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => setActivePageState(pageFromLocation());
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -375,11 +404,13 @@ export default function Dashboard() {
         subcounty: "",
         ward: "",
       });
-      setActivePage(session.role === "farmer" ? "farmer" : "county");
+      if (activePage === "home") {
+        setActivePage(session.role === "farmer" ? "farmer" : "county", { replace: true });
+      }
       return;
     }
 
-  }, [session]);
+  }, [activePage, session, setActivePage]);
 
   const loadDashboardApi = useCallback(async () => {
     if (!session?.token) return;
@@ -457,7 +488,7 @@ export default function Dashboard() {
     setSession(null);
     setPortalView("landing");
     setFilter({ county: "", subcounty: "", ward: "" });
-    setActivePage("home");
+    setActivePage("home", { replace: true });
     setDashboardData(nationalSummary);
     setAlertData([]);
     setReportData([]);
@@ -522,9 +553,11 @@ export default function Dashboard() {
       onOpenCounty: handleOpenCountySite,
       initialQuestion: assistantDraft,
       onAskAssistant: handleAskAssistant,
+      onOpenIntelligenceHub: () => setActivePage("intelligence-hub"),
     };
 
     if (activePage === "map") return <MapView {...sharedProps} />;
+    if (activePage === "intelligence-hub") return <IntelligenceHub {...sharedProps} />;
     if (activePage === "intelligence") return <IntelligenceAssistant {...sharedProps} />;
     if (activePage === "county") return <CountyDashboard {...sharedProps} />;
     if (activePage === "farmer") return <FarmerDashboard {...sharedProps} />;
@@ -561,7 +594,6 @@ export default function Dashboard() {
         updatedAt={dashboardUpdatedAt}
         onRefresh={loadDashboardApi}
         onNavigate={setActivePage}
-        onAskAssistant={handleAskAssistant}
       />
     );
   }, [
@@ -578,6 +610,7 @@ export default function Dashboard() {
     lockedCounty,
     reportData,
     session,
+    setActivePage,
     setScopedFilter,
   ]);
 
@@ -622,7 +655,7 @@ export default function Dashboard() {
       lockedCounty={lockedCounty}
       onCountySelect={handleSidebarCountySelect}
     >
-      {["map", "intelligence", "reports", "admin", "county-sites"].includes(activePage) ? (
+      {["map", "intelligence-hub", "intelligence", "reports", "admin", "county-sites"].includes(activePage) ? (
         <Suspense fallback={<WorkspaceLoading />}>{page}</Suspense>
       ) : (
         <div className="aeis-workspace-grid">

@@ -21,7 +21,7 @@ import {
   Route,
   Sprout,
 } from "lucide-react";
-import { getApiBase } from "../utils/api";
+import { getApiBase } from "../../utils/api";
 
 const CONSOLES = [
   {
@@ -61,10 +61,24 @@ const CONSOLES = [
   },
   {
     id: "landuse",
-    label: "Land use & roads",
+    label: "Land Use",
     icon: Layers3,
     tone: "slate",
-    sourceSlugs: ["knbs-statistical-portals", "esa-worldcover", "openstreetmap-roads", "kenya-roads-board"],
+    sourceSlugs: ["knbs-statistical-portals", "esa-worldcover", "openstreetmap-roads"],
+  },
+  {
+    id: "roads",
+    label: "Roads & Infrastructure",
+    icon: Route,
+    tone: "slate",
+    sourceSlugs: ["kenya-roads-board", "openstreetmap-roads", "knbs-statistical-portals"],
+  },
+  {
+    id: "county",
+    label: "County Intelligence",
+    icon: MapPinned,
+    tone: "blue",
+    sourceSlugs: ["open-meteo", "nasa-power", "copernicus-sentinel-2", "openstreetmap-roads"],
   },
 ];
 
@@ -185,8 +199,8 @@ function SourceGate({ title, rows }) {
   );
 }
 
-export default function EnvironmentalIntelligenceHub({ session, county, onOpenAssistant }) {
-  const [activeConsole, setActiveConsole] = useState("rainfall");
+export default function EnvironmentalIntelligenceHub({ session, county, onOpenAssistant, defaultConsole = "rainfall" }) {
+  const [activeConsole, setActiveConsole] = useState(defaultConsole || "rainfall");
   const [catalog, setCatalog] = useState(null);
   const [history, setHistory] = useState(null);
   const [status, setStatus] = useState("Loading source catalogue...");
@@ -251,6 +265,10 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    setActiveConsole(defaultConsole || "rainfall");
+  }, [defaultConsole]);
 
   const assistantPrompt = countyName
     ? `Analyze ${countyName} as a county weather and land intelligence workspace. Use rainfall history, six-month historical rainfall outlook, water, vegetation, forest, soil health, land-use, housing, cropland, forest land, and road-source readiness.`
@@ -428,11 +446,11 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
             {activeConsole === "landuse" && (
               <>
                 <SourceGate
-                  title="Land-use and road portal metrics"
+                  title="Land-use portal metrics"
                   rows={[
                     { metric: "Housing / built-up land", source: "KNBS + ESA WorldCover + OSM", status: "Source required" },
                     { metric: "Cropland / forest / water shares", source: "ESA WorldCover + Sentinel/Landsat", status: "Source required" },
-                    { metric: "Tarmac and all-weather roads", source: "Kenya Roads Board / OSM highway+surface tags", status: "Source required" },
+                    { metric: "Land-use change by county", source: "KNBS + annual land-cover products", status: "Source required" },
                   ]}
                 />
                 <div className="aeis-env-landuse-legend">
@@ -445,6 +463,26 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
                   ))}
                 </div>
               </>
+            )}
+            {activeConsole === "roads" && (
+              <SourceGate
+                title="Roads and infrastructure portal metrics"
+                rows={[
+                  { metric: "Tarmac road length", source: "Kenya Roads Board / OSM surface tags", status: "Source required" },
+                  { metric: "All-weather road length", source: "Kenya Roads Board / OSM road classification", status: "Source required" },
+                  { metric: "Access and exposure overlay", source: "Roads + rainfall + water extent + county boundaries", status: "Provider required" },
+                ]}
+              />
+            )}
+            {activeConsole === "county" && (
+              <SourceGate
+                title="County intelligence dashboard metrics"
+                rows={[
+                  { metric: "County climate profile", source: "Open-Meteo + NASA POWER + county boundary", status: countyName ? "Scoped" : "Select county" },
+                  { metric: "Sub-county and ward drill-down", source: "Official GIS boundary layers", status: "Ready" },
+                  { metric: "County action brief", source: "Weather + imagery + field reports + reports", status: "Source gated" },
+                ]}
+              />
             )}
           </div>
           <div className="aeis-env-source-card">

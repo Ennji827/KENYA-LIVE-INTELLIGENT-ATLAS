@@ -73,7 +73,7 @@ export default function CountySites({ onOpenCounty }) {
                   <strong>{countyEmail(county.name)}</strong>
                 </div>
                 <div>
-                  <span>Crop stress</span>
+                  <span>Vegetation stress</span>
                   <strong>Blocked</strong>
                 </div>
                 <div>
@@ -86,7 +86,7 @@ export default function CountySites({ onOpenCounty }) {
                 </div>
               </div>
               <div className="aeis-county-site-footer">
-                <span>Farmer registry source required</span>
+                <span>Field/site registry source required</span>
                 <button type="button" className="aeis-btn" onClick={() => onOpenCounty(county)}>
                   Open county site
                 </button>
