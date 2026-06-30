@@ -262,6 +262,12 @@ function monthlyMetricRows(records = [], metricKey) {
     }));
 }
 
+function formatStat(value, digits = 0, suffix = "") {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "Source required";
+  return `${formatNumber(number, digits)}${suffix}`;
+}
+
 function average(values) {
   const valid = values.map(Number).filter(Number.isFinite);
   if (!valid.length) return null;
@@ -327,6 +333,7 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
     () => annualMetric(history?.records || [], metricConfig.key),
     [history, metricConfig.key],
   );
+  const countyStatistics = history?.county_statistics || [];
   const readiness = history?.console_readiness?.[activeConsole];
   const sourceBySlug = useMemo(() => {
     const map = new Map();
@@ -441,6 +448,60 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
           <em>{readiness?.source || "Unconnected metrics stay hidden"}</em>
         </div>
       </div>
+
+      {countyStatistics.length > 0 && (
+        <section className="aeis-county-statistics-panel" aria-label="All county statistics">
+          <div className="aeis-county-statistics-head">
+            <div>
+              <span className="aeis-kicker">County statistics</span>
+              <h3>
+                {countyStatistics.length >= 47
+                  ? "All 47 counties statistics"
+                  : `${scopeLabel} statistics`}
+              </h3>
+              <p>
+                KMD/KALRO are prioritised when connected; NASA POWER is used as the open monthly fallback.
+                Raster and official land-use/road values remain source-gated.
+              </p>
+            </div>
+            <strong>{countyStatistics.length}/47 counties</strong>
+          </div>
+          <div className="aeis-county-statistics-table-wrap">
+            <table className="aeis-county-statistics-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>County</th>
+                  <th>Latest year rain</th>
+                  <th>Recent 12-mo rain</th>
+                  <th>Avg temp</th>
+                  <th>Water</th>
+                  <th>Vegetation</th>
+                  <th>Soil</th>
+                  <th>Dryness</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {countyStatistics.map((row) => (
+                  <tr key={`${row.county_code}-${row.county}`}>
+                    <td>{row.county_code}</td>
+                    <td><strong>{row.county}</strong></td>
+                    <td>{formatStat(row.latest_annual_rainfall_mm, 0, " mm")}</td>
+                    <td>{formatStat(row.recent_12_month_rainfall_mm, 0, " mm")}</td>
+                    <td>{formatStat(row.average_temperature_c, 1, " °C")}</td>
+                    <td>{formatStat(row.water_pressure_index, 1)}</td>
+                    <td>{formatStat(row.vegetation_support_index, 1)}</td>
+                    <td>{formatStat(row.soil_moisture_proxy, 1)}</td>
+                    <td>{formatStat(row.dryness_pressure_index, 1)}</td>
+                    <td><span className={`aeis-county-stat-status ${row.status}`}>{row.status?.replace("_", " ") || "source required"}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {activeConsole === "rainfall" ? (
         <div className="aeis-env-rainfall-grid">

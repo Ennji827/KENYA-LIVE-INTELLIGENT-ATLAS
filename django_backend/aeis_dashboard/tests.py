@@ -468,6 +468,9 @@ class AEISApiTests(TestCase):
         self.assertEqual(data["record_count"], 3)
         self.assertEqual(data["records"][0]["rainfall_mm"], 62.0)
         self.assertEqual(data["console_readiness"]["rainfall"]["status"], "live")
+        self.assertEqual(len(data["county_statistics"]), 1)
+        self.assertEqual(data["county_statistics"][0]["county"], "Mombasa")
+        self.assertEqual(data["county_statistics"][0]["county_code"], "001")
         self.assertIn("kenya", data["source_note"].lower())
         self.assertEqual(len(data["six_month_outlook"]), 6)
 

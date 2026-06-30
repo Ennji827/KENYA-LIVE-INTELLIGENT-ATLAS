@@ -743,6 +743,41 @@ def _aggregate_monthly_records(county_records: list[dict]) -> list[dict]:
     return records
 
 
+def _county_statistics(county_records: list[dict], county_names: list[str]) -> list[dict]:
+    grouped: dict[str, list[dict]] = {}
+    for row in county_records:
+        county = str(row.get("county") or "").strip()
+        if county:
+            grouped.setdefault(county, []).append(row)
+
+    statistics = []
+    for index, county_name in enumerate(county_names):
+        rows = sorted(grouped.get(county_name, []), key=lambda row: row["date"])
+        annual = _annual_summaries(rows)
+        latest_annual = annual[-1] if annual else {}
+        recent_rows = rows[-12:] if rows else []
+        statistics.append(
+            {
+                "county": county_name,
+                "county_code": f"{index + 1:03d}",
+                "record_count": len(rows),
+                "latest_available": rows[-1]["date"] if rows else None,
+                "latest_year": latest_annual.get("year"),
+                "latest_annual_rainfall_mm": latest_annual.get("rainfall_mm"),
+                "average_monthly_rainfall_mm": _round(_mean([row.get("rainfall_mm") for row in rows])),
+                "recent_12_month_rainfall_mm": _round(_sum([row.get("rainfall_mm") for row in recent_rows])),
+                "average_temperature_c": _round(_mean([row.get("temperature_c") for row in rows])),
+                "water_pressure_index": _round(_mean([row.get("water_pressure_index") for row in rows])),
+                "vegetation_support_index": _round(_mean([row.get("vegetation_support_index") for row in rows])),
+                "soil_moisture_proxy": _round(_mean([row.get("soil_moisture_proxy") for row in rows])),
+                "dryness_pressure_index": _round(_mean([row.get("dryness_pressure_index") for row in rows])),
+                "status": "live" if rows else "source_required",
+                "source": "KMD/KALRO preferred; NASA POWER fallback" if rows else "Source required",
+            }
+        )
+    return statistics
+
+
 def _monthly_intelligence_window(query) -> tuple[int, date, date]:
     today = date.today()
     try:
@@ -772,9 +807,14 @@ def monthly_intelligence(query) -> dict:
 
     source_errors = []
     source_urls = []
+    county_statistics = []
     if county:
         history = nasa_power_history({**common_query, "county": county})
         records = _normalise_history(history)
+        county_statistics = _county_statistics(
+            [{**row, "county": history["scope"]} for row in records],
+            [history["scope"]],
+        )
         scope = "county"
         scope_name = history["scope"]
         center = {"latitude": history["latitude"], "longitude": history["longitude"]}
@@ -804,6 +844,7 @@ def monthly_intelligence(query) -> dict:
         if not county_records:
             raise DataSourceError("National monthly aggregation could not load any county records from NASA POWER.", 503)
         records = _aggregate_monthly_records(county_records)
+        county_statistics = _county_statistics(county_records, county_names)
         scope = "national"
         scope_name = "Kenya"
         center = {"latitude": None, "longitude": None}
@@ -845,6 +886,7 @@ def monthly_intelligence(query) -> dict:
         "annual": annual,
         "monthly_normals": normals,
         "six_month_outlook": _six_month_outlook(normals),
+        "county_statistics": county_statistics,
         "console_readiness": _console_readiness(records, scope),
         "source_urls": source_urls[:5],
         "source_error_count": len(source_errors),

@@ -7500,6 +7500,110 @@ body {
   padding: 16px 20px;
 }
 
+.aeis-county-statistics-panel {
+  display: grid;
+  gap: 12px;
+  margin: 0 20px 20px;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.94), rgba(255, 255, 255, 0.96));
+}
+
+.aeis-county-statistics-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.aeis-county-statistics-head h3 {
+  margin: 4px 0 6px;
+  color: #0f172a;
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+
+.aeis-county-statistics-head p {
+  max-width: 880px;
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.aeis-county-statistics-head > strong {
+  flex: 0 0 auto;
+  border: 1px solid #bae6fd;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  padding: 8px 11px;
+}
+
+.aeis-county-statistics-table-wrap {
+  max-height: 460px;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+.aeis-county-statistics-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.aeis-county-statistics-table th,
+.aeis-county-statistics-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.aeis-county-statistics-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.aeis-county-statistics-table td {
+  color: #334155;
+  font-weight: 750;
+}
+
+.aeis-county-statistics-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.aeis-county-stat-status {
+  display: inline-flex;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 8px;
+  text-transform: capitalize;
+}
+
+.aeis-county-stat-status.live {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
 .aeis-env-summary-strip > div {
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 18px;
@@ -7760,6 +7864,11 @@ body {
   .aeis-env-summary-strip,
   .aeis-env-landuse-legend {
     grid-template-columns: 1fr;
+  }
+
+  .aeis-county-statistics-head {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .aeis-env-gate-row strong {
