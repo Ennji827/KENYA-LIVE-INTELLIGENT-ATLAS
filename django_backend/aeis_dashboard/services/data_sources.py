@@ -25,6 +25,7 @@ from django.utils.text import slugify
 from aeis_dashboard.models import (
     DataAsset,
     DataQualityAssessment,
+    EnvironmentalMetricObservation,
     ExternalDataSource,
     MonthlyClimateObservation,
 )
@@ -60,6 +61,27 @@ MONTHLY_INTELLIGENCE_PARAMETERS = [
     "WS2M",
     "ALLSKY_SFC_SW_DWN",
 ]
+ENVIRONMENTAL_METRIC_CATALOG = {
+    "ndvi": {"label": "NDVI", "category": "vegetation", "unit": "index", "min": -1, "max": 1},
+    "ndwi": {"label": "NDWI", "category": "water", "unit": "index", "min": -1, "max": 1},
+    "lst_c": {"label": "Land surface temperature", "category": "vegetation", "unit": "°C", "min": -30, "max": 80},
+    "water_extent_ha": {"label": "Surface water extent", "category": "water", "unit": "ha", "min": 0, "max": 10000000},
+    "water_extent_pct": {"label": "Surface water share", "category": "water", "unit": "%", "min": 0, "max": 100},
+    "forest_cover_ha": {"label": "Forest cover", "category": "forest", "unit": "ha", "min": 0, "max": 10000000},
+    "forest_cover_pct": {"label": "Forest cover share", "category": "forest", "unit": "%", "min": 0, "max": 100},
+    "tree_cover_pct": {"label": "Tree cover share", "category": "forest", "unit": "%", "min": 0, "max": 100},
+    "cropland_pct": {"label": "Cropland share", "category": "landuse", "unit": "%", "min": 0, "max": 100},
+    "built_up_pct": {"label": "Built-up / housing share", "category": "landuse", "unit": "%", "min": 0, "max": 100},
+    "grassland_pct": {"label": "Grassland / shrubland share", "category": "landuse", "unit": "%", "min": 0, "max": 100},
+    "bare_land_pct": {"label": "Bare / sparse land share", "category": "landuse", "unit": "%", "min": 0, "max": 100},
+    "land_use_share_pct": {"label": "Land-use class share", "category": "landuse", "unit": "%", "min": 0, "max": 100},
+    "tarmac_road_km": {"label": "Tarmac road length", "category": "roads", "unit": "km", "min": 0, "max": 1000000},
+    "all_weather_road_km": {"label": "All-weather road length", "category": "roads", "unit": "km", "min": 0, "max": 1000000},
+    "road_density_km_per_100sqkm": {"label": "Road density", "category": "roads", "unit": "km/100 km²", "min": 0, "max": 5000},
+    "soil_organic_carbon_pct": {"label": "Soil organic carbon", "category": "soil", "unit": "%", "min": 0, "max": 30},
+    "soil_ph": {"label": "Soil pH", "category": "soil", "unit": "pH", "min": 0, "max": 14},
+    "soil_moisture_pct": {"label": "Soil moisture", "category": "soil", "unit": "%", "min": 0, "max": 100},
+}
 FILE_FORMATS = {
     ".geojson": ("geojson", DataAsset.AssetType.VECTOR),
     ".json": ("geojson", DataAsset.AssetType.VECTOR),
@@ -310,16 +332,28 @@ def source_catalog() -> dict:
         for row in MonthlyClimateObservation.objects.values("source_slug")
         .annotate(count=models_count("id"), latest=models_max("observation_month"))
     }
+    metric_sources = {
+        row["source_slug"]: row
+        for row in EnvironmentalMetricObservation.objects.values("source_slug")
+        .annotate(count=models_count("id"), latest=models_max("period_end"))
+    }
     builtin_sources = []
     for source in BUILTIN_SOURCES:
         source_payload = dict(source)
         local_monthly = monthly_sources.get(source["slug"])
-        if local_monthly:
+        local_metrics = metric_sources.get(source["slug"])
+        if local_monthly or local_metrics:
+            latest_candidates = [
+                item["latest"]
+                for item in [local_monthly, local_metrics]
+                if item and item.get("latest")
+            ]
+            count = int((local_monthly or {}).get("count") or 0) + int((local_metrics or {}).get("count") or 0)
             source_payload["access"] = "connected"
-            source_payload["latest_available"] = local_monthly["latest"].isoformat()
+            source_payload["latest_available"] = max(latest_candidates).isoformat() if latest_candidates else None
             source_payload["description"] = (
-                f"{source['description']} AEIS-K has {local_monthly['count']} reviewed monthly "
-                "county observation(s) imported from this source."
+                f"{source['description']} AEIS-K has {count} reviewed observation(s) "
+                "imported from this source."
             )
         builtin_sources.append(source_payload)
     custom = [
@@ -349,6 +383,7 @@ def source_catalog() -> dict:
             "uploaded_assets": assets.count(),
             "latest_upload": _iso(assets.first().created_at) if assets.exists() else None,
             "reviewed_monthly_climate_records": MonthlyClimateObservation.objects.count(),
+            "reviewed_environmental_metric_records": EnvironmentalMetricObservation.objects.count(),
         },
         "history_window": {
             "recommended_start": recommended_start.isoformat(),
@@ -1096,6 +1131,17 @@ def monthly_intelligence(query) -> dict:
     annual = _annual_summaries(records)
     normals = _monthly_normals(records)
     latest = records[-1] if records else None
+    observed_metrics = environmental_metrics_summary(start, date.today(), county or None)
+    console_readiness = _console_readiness(records, scope, source_label, rainfall_status)
+    for category, metric_rows in observed_metrics.get("latest_by_category", {}).items():
+        if category in console_readiness and metric_rows:
+            source_names = sorted({row.get("source_name") for row in metric_rows if row.get("source_name")})
+            console_readiness[category]["status"] = "official_reviewed"
+            console_readiness[category]["source"] = "; ".join(source_names[:3]) or "Reviewed source-backed metric observations"
+            console_readiness[category]["note"] = (
+                "Real reviewed metric observations are available for this console. "
+                "Climate-derived proxy charts remain labelled separately."
+            )
     payload = {
         "provider": provider,
         "source": source,
@@ -1110,7 +1156,7 @@ def monthly_intelligence(query) -> dict:
         "earliest_available": records[0]["date"] if records else None,
         "record_count": len(records),
         "parameters": {
-            "rainfall_mm": "Monthly precipitation total estimated from NASA POWER PRECTOTCORR.",
+            "rainfall_mm": "Monthly precipitation total from the selected source-backed record.",
             "temperature_c": "Monthly mean 2 m air temperature.",
             "humidity_pct": "Monthly mean relative humidity.",
             "wind_ms": "Monthly mean wind speed.",
@@ -1125,7 +1171,8 @@ def monthly_intelligence(query) -> dict:
         "monthly_normals": normals,
         "six_month_outlook": _six_month_outlook(normals),
         "county_statistics": county_statistics,
-        "console_readiness": _console_readiness(records, scope, source_label, rainfall_status),
+        "observed_metrics": observed_metrics,
+        "console_readiness": console_readiness,
         "source_urls": source_urls[:5],
         "source_error_count": len(source_errors),
         "source_errors": source_errors[:12],
@@ -1134,6 +1181,121 @@ def monthly_intelligence(query) -> dict:
     }
     cache.set(cache_key, payload, 12 * 60 * 60)
     return payload
+
+
+def _metric_window(query) -> tuple[int, date, date]:
+    today = date.today()
+    try:
+        years = max(1, min(30, int(query.get("years", "20"))))
+    except ValueError as exc:
+        raise DataSourceError("years must be numeric.") from exc
+    start = _parse_date(query.get("start"), date(today.year - years + 1, 1, 1))
+    end = _parse_date(query.get("end"), today)
+    if start > end:
+        raise DataSourceError("start must be on or before end.")
+    return years, start, end
+
+
+def _metric_payload(observation: EnvironmentalMetricObservation) -> dict:
+    return {
+        "id": observation.pk,
+        "source_slug": observation.source_slug,
+        "source_name": observation.source_name,
+        "provider": observation.provider,
+        "metric_key": observation.metric_key,
+        "metric_label": observation.metric_label,
+        "category": observation.category,
+        "unit": observation.unit,
+        "value": _round(observation.value, 3),
+        "period_start": observation.period_start.isoformat(),
+        "period_end": observation.period_end.isoformat(),
+        "period_grain": observation.period_grain,
+        "scope_level": observation.scope_level,
+        "scope_name": observation.scope_name,
+        "scope_code": observation.scope_code,
+        "confidence": observation.confidence,
+        "method": observation.method,
+        "quality_flag": observation.quality_flag,
+        "notes": observation.notes,
+    }
+
+
+def environmental_metrics_summary(start: date, end: date, county: str | None = None, category: str | None = None) -> dict:
+    queryset = EnvironmentalMetricObservation.objects.filter(period_end__gte=start, period_start__lte=end)
+    scope_name = "Kenya"
+    scope = "national"
+    if county:
+        feature = domain.find_county(county)
+        if not feature:
+            raise DataSourceError("County not found.", 404)
+        scope = "county"
+        scope_name = domain.county_name(feature)
+        county_code = domain.county_code(feature)
+        queryset = queryset.filter(
+            scope_level="county",
+        ).filter(Q(scope_name__iexact=scope_name) | Q(scope_code=county_code))
+    if category:
+        queryset = queryset.filter(category=category)
+
+    ordered = list(queryset.order_by("-period_end", "-period_start", "category", "metric_key", "scope_name")[:500])
+    latest_by_key: dict[tuple[str, str, str], dict] = {}
+    for observation in ordered:
+        key = (observation.category, observation.metric_key, f"{observation.scope_level}:{observation.scope_code}:{observation.scope_name}")
+        if key not in latest_by_key:
+            latest_by_key[key] = _metric_payload(observation)
+
+    latest_by_category: dict[str, list[dict]] = {}
+    for row in latest_by_key.values():
+        latest_by_category.setdefault(row["category"], []).append(row)
+    for rows in latest_by_category.values():
+        rows.sort(key=lambda item: (item["metric_label"], item["scope_name"]))
+
+    coverage = [
+        {
+            "category": row["category"],
+            "record_count": row["record_count"],
+            "latest_available": row["latest"].isoformat() if row["latest"] else None,
+            "scope_count": row["scope_count"],
+        }
+        for row in queryset.values("category").annotate(
+            record_count=models_count("id"),
+            latest=models_max("period_end"),
+            scope_count=models_count("scope_name", distinct=True),
+        ).order_by("category")
+    ]
+    return {
+        "provider": "AEIS-K reviewed environmental metric store",
+        "scope": scope,
+        "scope_name": scope_name,
+        "requested_start": start.isoformat(),
+        "requested_end": end.isoformat(),
+        "record_count": queryset.count(),
+        "coverage": coverage,
+        "latest_by_category": latest_by_category,
+        "records": [_metric_payload(observation) for observation in ordered],
+        "source_note": "Only imported, reviewed, source-backed environmental metrics are returned. Missing categories remain source-required.",
+    }
+
+
+def environmental_metrics(query) -> dict:
+    _, start, end = _metric_window(query)
+    category = str(query.get("category") or "").strip().lower()
+    if category and category not in {item["category"] for item in ENVIRONMENTAL_METRIC_CATALOG.values()}:
+        raise DataSourceError("Unknown environmental metric category.")
+    metric_key = str(query.get("metric") or "").strip().lower()
+    summary = environmental_metrics_summary(start, end, str(query.get("county") or "").strip() or None, category or None)
+    if metric_key:
+        if metric_key not in ENVIRONMENTAL_METRIC_CATALOG:
+            raise DataSourceError("Unknown environmental metric.")
+        summary["records"] = [row for row in summary["records"] if row["metric_key"] == metric_key]
+        summary["record_count"] = len(summary["records"])
+        latest_by_category: dict[str, list[dict]] = {}
+        for category_key, rows in summary["latest_by_category"].items():
+            filtered = [row for row in rows if row["metric_key"] == metric_key]
+            if filtered:
+                latest_by_category[category_key] = filtered
+        summary["latest_by_category"] = latest_by_category
+    return summary
 
 
 def sentinel_2_search(query) -> dict:

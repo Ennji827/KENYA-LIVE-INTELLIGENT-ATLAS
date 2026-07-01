@@ -268,6 +268,13 @@ function formatStat(value, digits = 0, suffix = "") {
   return `${formatNumber(number, digits)}${suffix}`;
 }
 
+function formatMetricValue(row) {
+  const number = Number(row?.value);
+  if (!Number.isFinite(number)) return "--";
+  const digits = Math.abs(number) < 10 && row?.unit !== "km" ? 2 : 1;
+  return `${formatNumber(number, digits)} ${row?.unit || ""}`.trim();
+}
+
 function average(values) {
   const valid = values.map(Number).filter(Number.isFinite);
   if (!valid.length) return null;
@@ -334,6 +341,7 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
     [history, metricConfig.key],
   );
   const countyStatistics = history?.county_statistics || [];
+  const observedMetricRows = history?.observed_metrics?.latest_by_category?.[activeConsole] || [];
   const readiness = history?.console_readiness?.[activeConsole];
   const sourceBySlug = useMemo(() => {
     const map = new Map();
@@ -609,6 +617,29 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
                 </div>
               </div>
             ) : null}
+            {observedMetricRows.length ? (
+              <div className="aeis-real-metrics-panel">
+                <div className="aeis-real-metrics-head">
+                  <strong>Real source-backed metrics</strong>
+                  <span>Imported reviewed records only — no demo or generated values.</span>
+                </div>
+                <div className="aeis-real-metrics-grid">
+                  {observedMetricRows.slice(0, 8).map((row) => (
+                    <article key={`${row.metric_key}-${row.scope_code}-${row.period_end}-${row.source_slug}`}>
+                      <span>{row.metric_label}</span>
+                      <strong>{formatMetricValue(row)}</strong>
+                      <em>{row.scope_name || row.scope_level} · {row.period_end}</em>
+                      <small>{row.source_name}</small>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="aeis-real-metrics-empty">
+                <strong>No real imported {active.label.toLowerCase()} metric yet.</strong>
+                <span>Import reviewed CSV/API outputs to populate this console; AEIS-K will keep it source-required until then.</span>
+              </div>
+            )}
             {activeConsole === "water" && (
               <SourceGate
                 title="Water console metrics"

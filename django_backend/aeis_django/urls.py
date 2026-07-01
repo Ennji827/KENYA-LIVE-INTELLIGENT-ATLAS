@@ -23,6 +23,7 @@ urlpatterns = [
     path("api/data/assets/<uuid:asset_id>/download", views.data_asset_download, name="data_asset_download"),
     path("api/data/history/nasa-power", views.nasa_power_history, name="nasa_power_history"),
     path("api/data/intelligence/monthly", views.monthly_intelligence, name="monthly_intelligence"),
+    path("api/data/intelligence/metrics", views.environmental_metrics, name="environmental_metrics"),
     path("api/data/imagery/sentinel-2", views.sentinel_2_search, name="sentinel_2_search"),
     path("api/data/imagery/landsat/latest", views.landsat_latest, name="landsat_latest"),
     path("api/data/imagery/landsat/map", views.landsat_map, name="landsat_map"),

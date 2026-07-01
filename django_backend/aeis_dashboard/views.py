@@ -405,6 +405,16 @@ def monthly_intelligence(request: HttpRequest) -> JsonResponse:
 
 
 @require_http_methods(["GET", "OPTIONS"])
+def environmental_metrics(request: HttpRequest) -> JsonResponse:
+    if not auth.active_session(request_token(request)):
+        return api_json({"error": "An active AEIS-K session is required to query source-backed environmental metrics."}, status=403)
+    try:
+        return api_json(data_sources.environmental_metrics(request.GET))
+    except data_sources.DataSourceError as exc:
+        return data_source_error(exc)
+
+
+@require_http_methods(["GET", "OPTIONS"])
 def sentinel_2_search(request: HttpRequest) -> JsonResponse:
     if not auth.active_session(request_token(request)):
         return api_json({"error": "An active AEIS-K session is required to search imagery."}, status=403)

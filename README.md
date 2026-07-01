@@ -116,6 +116,7 @@ The Ministry panel includes a GIS Data Sources workspace:
 
 - NASA POWER climate history: daily data from 1981 to near-real-time and monthly history through the latest completed year
 - Reviewed local monthly climate imports: KMD/KALRO/KNBS-style CSV records can override open fallback data county-by-county and month-by-month
+- Reviewed environmental metric imports: source-backed NDVI, NDWI, LST, water, forest, land-use, roads, and soil metrics can populate Intelligence Hub consoles
 - Copernicus Sentinel-2 catalogue: Level-1C and Level-2A catalogue coverage from June 27, 2015 to present
 - USGS Landsat Collection 2: the latest low-cloud Landsat 8/9 scene is discovered dynamically and shown as a dated map overlay
 - OpenStreetMap is the default open basemap; OpenTopoMap terrain and a reference satellite basemap are also available
@@ -129,6 +130,7 @@ Main endpoints:
 GET  /api/data/sources
 GET  /api/data/history/nasa-power
 GET  /api/data/intelligence/monthly
+GET  /api/data/intelligence/metrics
 GET  /api/data/imagery/sentinel-2
 GET  /api/data/imagery/landsat/latest
 GET  /api/data/imagery/landsat/map
@@ -148,6 +150,14 @@ python django_backend\manage.py import_monthly_climate C:\path\kmd-monthly.csv -
 
 Accepted CSV columns include `county` or `county_code`, `month` or `year` + `month_number`, `rainfall_mm`, `temperature_c`, `temperature_max_c`, `temperature_min_c`, `humidity_pct`, `wind_ms`, `solar_mj_m2_day`, `station_count`, `quality_flag`, and `notes`. Bad counties, bad dates, and impossible ranges are skipped and reported.
 
+Import reviewed environmental metric CSV records:
+
+```powershell
+python django_backend\manage.py import_environmental_metrics C:\path\metrics.csv --source-slug esa-worldcover --source-name "ESA WorldCover county zonal statistics" --provider "European Space Agency"
+```
+
+Accepted environmental metric columns include `county` or `scope_name`, `county_code` or `scope_code`, `metric_key`, `value`, `period_start`, `period_end`, `period_grain`, `source_slug`, `source_name`, `provider`, `confidence`, `method`, `quality_flag`, and `notes`. Supported metric keys include `ndvi`, `ndwi`, `lst_c`, `water_extent_ha`, `water_extent_pct`, `forest_cover_ha`, `forest_cover_pct`, `cropland_pct`, `built_up_pct`, `grassland_pct`, `bare_land_pct`, `tarmac_road_km`, `all_weather_road_km`, `road_density_km_per_100sqkm`, `soil_organic_carbon_pct`, `soil_ph`, and `soil_moisture_pct`.
+
 Example:
 
 ```text
@@ -155,6 +165,7 @@ GET /api/data/history/nasa-power?county=Mombasa&temporal=monthly&start=2016-01-0
 GET /api/data/history/nasa-power?county=Mombasa&temporal=daily&start=2026-01-01&end=2026-06-20
 GET /api/data/intelligence/monthly?county=Mombasa&years=20&source=auto
 GET /api/data/intelligence/monthly?years=20&source=local
+GET /api/data/intelligence/metrics?county=Mombasa&category=landuse&years=20
 GET /api/data/imagery/sentinel-2?county=Mombasa&start=2016-01-01&end=2026-06-20&max_cloud=30
 GET /api/data/imagery/landsat/latest?county=Mombasa&lookback_days=365&max_cloud=35
 ```
