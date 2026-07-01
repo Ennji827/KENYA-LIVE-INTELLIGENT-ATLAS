@@ -444,7 +444,7 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
         </div>
         <div>
           <span>Source honesty</span>
-          <strong>{readiness?.status ? readiness.status.replace("_", " ") : "Gated"}</strong>
+          <strong>{readiness?.status ? readiness.status.replaceAll("_", " ") : "Gated"}</strong>
           <em>{readiness?.source || "Unconnected metrics stay hidden"}</em>
         </div>
       </div>
@@ -460,8 +460,9 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
                   : `${scopeLabel} statistics`}
               </h3>
               <p>
-                KMD/KALRO are prioritised when connected; NASA POWER is used as the open monthly fallback.
-                Raster and official land-use/road values remain source-gated.
+                Only source-backed values are shown. Reviewed KMD/KALRO/KNBS-style imports are prioritised;
+                NASA POWER is used only as the real open monthly fallback. Raster and official land-use/road
+                values remain source-gated.
               </p>
             </div>
             <strong>{countyStatistics.length}/47 counties</strong>
@@ -494,7 +495,7 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
                     <td>{formatStat(row.vegetation_support_index, 1)}</td>
                     <td>{formatStat(row.soil_moisture_proxy, 1)}</td>
                     <td>{formatStat(row.dryness_pressure_index, 1)}</td>
-                    <td><span className={`aeis-county-stat-status ${row.status}`}>{row.status?.replace("_", " ") || "source required"}</span></td>
+                    <td><span className={`aeis-county-stat-status ${row.status}`}>{row.status?.replaceAll("_", " ") || "source required"}</span></td>
                   </tr>
                 ))}
               </tbody>

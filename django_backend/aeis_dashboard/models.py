@@ -191,6 +191,53 @@ class DataQualityAssessment(models.Model):
     assessed_at = models.DateTimeField(auto_now=True)
 
 
+class MonthlyClimateObservation(models.Model):
+    """Reviewed monthly county climate records imported from official/local sources."""
+
+    source_slug = models.SlugField(default="reviewed-local-climate")
+    source_name = models.CharField(max_length=180)
+    provider = models.CharField(max_length=140, blank=True)
+    county_name = models.CharField(max_length=100, db_index=True)
+    county_code = models.CharField(max_length=8, blank=True, db_index=True)
+    observation_month = models.DateField(db_index=True)
+    rainfall_mm = models.FloatField(null=True, blank=True)
+    temperature_c = models.FloatField(null=True, blank=True)
+    temperature_max_c = models.FloatField(null=True, blank=True)
+    temperature_min_c = models.FloatField(null=True, blank=True)
+    humidity_pct = models.FloatField(null=True, blank=True)
+    wind_ms = models.FloatField(null=True, blank=True)
+    solar_mj_m2_day = models.FloatField(null=True, blank=True)
+    station_count = models.PositiveSmallIntegerField(null=True, blank=True)
+    quality_flag = models.CharField(max_length=32, blank=True, default="reviewed")
+    notes = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    imported_by = models.ForeignKey(
+        AEISUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="imported_monthly_climate_observations",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["observation_month", "county_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_slug", "county_code", "county_name", "observation_month"],
+                name="aeis_mco_src_scope_month_uq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["county_name", "observation_month"], name="aeis_mco_county_month_idx"),
+            models.Index(fields=["source_slug", "observation_month"], name="aeis_mco_source_month_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.county_name} {self.observation_month:%Y-%m} ({self.source_slug})"
+
+
 class Alert(models.Model):
     class Severity(models.TextChoices):
         LOW = "low", "Low"

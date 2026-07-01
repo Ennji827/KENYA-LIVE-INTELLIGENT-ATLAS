@@ -7604,6 +7604,19 @@ body {
   color: #166534;
 }
 
+.aeis-county-stat-status.official_reviewed {
+  border-color: #bbf7d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.aeis-county-stat-status.source_backed,
+.aeis-county-stat-status.mixed_source_backed {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
 .aeis-env-summary-strip > div {
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 18px;
