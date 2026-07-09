@@ -36,7 +36,7 @@ const CONSOLES = [
     label: "Water",
     icon: Droplets,
     tone: "cyan",
-    sourceSlugs: ["kenya-meteorological-department", "nasa-power", "jrc-global-surface-water", "google-earth-engine"],
+    sourceSlugs: ["kenya-meteorological-department", "nasa-power", "jrc-global-surface-water", "copernicus-sentinel-2", "google-earth-engine"],
   },
   {
     id: "vegetation",
@@ -50,21 +50,21 @@ const CONSOLES = [
     label: "Forest",
     icon: FlameKindling,
     tone: "emerald",
-    sourceSlugs: ["esa-worldcover", "copernicus-sentinel-2", "usgs-landsat"],
+    sourceSlugs: ["esa-worldcover", "copernicus-sentinel-2", "usgs-landsat", "google-earth-engine"],
   },
   {
     id: "soil",
     label: "Soil health",
     icon: Sprout,
     tone: "amber",
-    sourceSlugs: ["kalro-kaop-weather", "kenya-meteorological-department", "isric-soilgrids", "nasa-power"],
+    sourceSlugs: ["kalro-kaop-weather", "kenya-meteorological-department", "isric-soilgrids", "county-field-site-registry", "nasa-power"],
   },
   {
     id: "landuse",
     label: "Land Use",
     icon: Layers3,
     tone: "slate",
-    sourceSlugs: ["knbs-statistical-portals", "esa-worldcover", "openstreetmap-roads"],
+    sourceSlugs: ["knbs-statistical-portals", "esa-worldcover", "dynamic-world", "openstreetmap-roads"],
   },
   {
     id: "roads",
@@ -78,7 +78,7 @@ const CONSOLES = [
     label: "County Intelligence",
     icon: MapPinned,
     tone: "blue",
-    sourceSlugs: ["kenya-meteorological-department", "kalro-kaop-weather", "open-meteo", "nasa-power"],
+    sourceSlugs: ["kenya-meteorological-department", "kalro-kaop-weather", "county-field-site-registry", "open-meteo", "nasa-power"],
   },
 ];
 
@@ -166,6 +166,44 @@ const CONSOLE_METRICS = {
     color: "#334155",
     fill: "#e2e8f0",
   },
+};
+
+const CONSOLE_BLUEPRINTS = {
+  water: [
+    { label: "Ready now", value: "Rainfall pressure", detail: "Monthly rainfall history creates a water-pressure planning proxy." },
+    { label: "Boundary scope", value: "County / ward", detail: "County, sub-county, and ward boundaries are available for water exposure drill-down." },
+    { label: "Fill next", value: "Water extent", detail: "Import JRC Global Surface Water or Sentinel-2 NDWI zonal statistics." },
+  ],
+  vegetation: [
+    { label: "Ready now", value: "Rainfall support", detail: "Rainfall and temperature history provide vegetation-support context." },
+    { label: "Boundary scope", value: "County / ward", detail: "Use boundaries to target field verification and raster clipping." },
+    { label: "Fill next", value: "NDVI / NDWI", detail: "Connect Sentinel, Landsat, or Earth Engine vegetation metrics." },
+  ],
+  forest: [
+    { label: "Ready now", value: "Dryness pressure", detail: "Rainfall, temperature, humidity, and wind feed forest exposure context." },
+    { label: "Boundary scope", value: "County forest watch", detail: "County boundaries frame tree-cover and fire-risk overlays." },
+    { label: "Fill next", value: "Forest cover", detail: "Import ESA WorldCover, Sentinel classification, or reviewed forest inventory." },
+  ],
+  soil: [
+    { label: "Ready now", value: "Moisture proxy", detail: "Rainfall, humidity, and temperature create soil-moisture planning context." },
+    { label: "Boundary scope", value: "County / farm gate", detail: "Use county and field/site boundaries for verified soil-test planning." },
+    { label: "Fill next", value: "SoilGrids / tests", detail: "Import ISRIC SoilGrids or verified county soil-test outputs." },
+  ],
+  landuse: [
+    { label: "Ready now", value: "Boundary atlas", detail: "County, sub-county, and ward geography is ready for land-use clipping." },
+    { label: "Ready now", value: "Rainfall exposure", detail: "Monthly rainfall context shows where land-use decisions face wet/dry pressure." },
+    { label: "Fill next", value: "Land-cover shares", detail: "Import KNBS, ESA WorldCover, Dynamic World, or reviewed classifications." },
+  ],
+  roads: [
+    { label: "Ready now", value: "Boundary atlas", detail: "County and ward boundaries are ready for road exposure overlays." },
+    { label: "Ready now", value: "Rainfall exposure", detail: "Monthly rainfall context identifies road-maintenance and access risk windows." },
+    { label: "Fill next", value: "Road inventory", detail: "Import Kenya Roads Board records or QA-reviewed OSM road classifications." },
+  ],
+  county: [
+    { label: "Ready now", value: "Boundary drill-down", detail: "County, sub-county, and ward coverage is available for the selected scope." },
+    { label: "Ready now", value: "Climate context", detail: "Open-Meteo and NASA/KMD/KALRO-priority climate records support county context." },
+    { label: "Fill next", value: "Operational evidence", detail: "Add field reports, reviewed metrics, assets, alerts, and approved reports." },
+  ],
 };
 
 function formatNumber(value, digits = 0) {
@@ -275,6 +313,17 @@ function formatMetricValue(row) {
   return `${formatNumber(number, digits)} ${row?.unit || ""}`.trim();
 }
 
+function formatDate(value) {
+  if (!value) return "No dated record";
+  return String(value).slice(0, 10);
+}
+
+function formatApiValue(value, fallback = "--") {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (typeof value === "number") return formatNumber(value, Math.abs(value) < 10 ? 2 : 1);
+  return String(value);
+}
+
 function average(values) {
   const valid = values.map(Number).filter(Number.isFinite);
   if (!valid.length) return null;
@@ -285,6 +334,20 @@ function sourceTone(access = "") {
   if (access === "connected" || access === "connected_catalogue" || access === "configured") return "live";
   if (access === "configuration_required") return "setup";
   return "required";
+}
+
+function readinessTone(status = "") {
+  if (status === "live" || status === "source_backed" || status === "official_reviewed") return "live";
+  if (status === "partial") return "partial";
+  return "empty";
+}
+
+function readinessLabel(status = "") {
+  if (status === "live") return "Live";
+  if (status === "source_backed") return "Source backed";
+  if (status === "official_reviewed") return "Official reviewed";
+  if (status === "partial") return "Proxy only";
+  return "Empty";
 }
 
 function SourceChip({ source }) {
@@ -314,10 +377,91 @@ function SourceGate({ title, rows }) {
   );
 }
 
+function LiveApiEvidence({ evidence, activeConsole }) {
+  const rows = [];
+  if (evidence?.sentinel) {
+    rows.push({
+      key: "sentinel",
+      label: "Sentinel-2 catalogue",
+      value: `${formatApiValue(evidence.sentinel.item_count, "0")} scenes`,
+      detail: `${evidence.sentinel.provider || "Copernicus STAC"} - max cloud ${formatApiValue(evidence.sentinel.max_cloud, "--")}%`,
+      status: evidence.sentinel.item_count > 0 ? "Live catalogue" : "No scene in window",
+    });
+  }
+  if (evidence?.landsat) {
+    rows.push({
+      key: "landsat",
+      label: "Landsat latest scene",
+      value: evidence.landsat.scene?.date || evidence.landsat.status?.replaceAll("_", " ") || "--",
+      detail: `${evidence.landsat.provider || "USGS LandsatLook"} - cloud ${formatApiValue(evidence.landsat.scene?.cloud_cover, "--")}%`,
+      status: evidence.landsat.scene ? "Live catalogue" : "No scene in window",
+    });
+  }
+  if (evidence?.soilgrids) {
+    const soil = evidence.soilgrids.properties || {};
+    rows.push({
+      key: "soilgrids",
+      label: "SoilGrids point estimate",
+      value: soil.soil_ph ? `pH ${formatApiValue(soil.soil_ph)}` : evidence.soilgrids.status?.replaceAll("_", " "),
+      detail: `SOC ${formatApiValue(soil.soil_organic_carbon_pct)}% - ${evidence.soilgrids.depth || "0-5cm"} at county centre`,
+      status: evidence.soilgrids.status === "source_backed" ? "Live model" : "No model value",
+    });
+  }
+  (evidence?.segments || []).forEach((segment) => {
+    rows.push({
+      key: `segment-${segment.segment_class || segment.label}`,
+      label: `${segment.label || segment.segment_class} from OSM`,
+      value: `${formatApiValue(segment.count, "0")} features`,
+      detail: `${segment.provider || "OpenStreetMap Overpass"} - ${segment.identifier || "county scope"}`,
+      status: segment.status === "ok" ? "Live map extract" : segment.status?.replaceAll("_", " ") || "Unavailable",
+    });
+  });
+
+  if (evidence?.status === "loading") {
+    return (
+      <div className="aeis-real-metrics-empty">
+        <strong>Checking live APIs...</strong>
+        <span>Querying the providers that fit the {activeConsole} console.</span>
+      </div>
+    );
+  }
+
+  if (!rows.length) {
+    return (
+      <div className="aeis-real-metrics-empty">
+        <strong>No live API query for this scope yet.</strong>
+        <span>Select a county to query Sentinel, Landsat, SoilGrids, and OSM where they fit this console.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="aeis-real-metrics-panel">
+      <div className="aeis-real-metrics-head">
+        <strong>Live API evidence</strong>
+        <span>Catalogue/model evidence only; publication metrics still require zonal processing or official imports.</span>
+      </div>
+      <div className="aeis-real-metrics-grid">
+        {rows.map((row) => (
+          <article key={row.key}>
+            <span>{row.label}</span>
+            <strong>{row.value}</strong>
+            <em>{row.status}</em>
+            <small>{row.detail}</small>
+          </article>
+        ))}
+      </div>
+      {evidence?.error && <p className="aeis-source-note">{evidence.error}</p>}
+    </div>
+  );
+}
+
 export default function EnvironmentalIntelligenceHub({ session, county, onOpenAssistant, defaultConsole = "rainfall" }) {
   const [activeConsole, setActiveConsole] = useState(defaultConsole || "rainfall");
   const [catalog, setCatalog] = useState(null);
   const [history, setHistory] = useState(null);
+  const [researchContext, setResearchContext] = useState(null);
+  const [apiEvidence, setApiEvidence] = useState({ status: "idle" });
   const [status, setStatus] = useState("Loading source catalogue...");
   const [loading, setLoading] = useState(false);
 
@@ -332,6 +476,7 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
   const latestRain = rainfallRows[rainfallRows.length - 1];
   const active = CONSOLES.find((consoleItem) => consoleItem.id === activeConsole) || CONSOLES[0];
   const metricConfig = CONSOLE_METRICS[activeConsole] || CONSOLE_METRICS.rainfall;
+  const blueprintRows = CONSOLE_BLUEPRINTS[activeConsole] || [];
   const monthlyMetric = useMemo(
     () => monthlyMetricRows(history?.records || [], metricConfig.key),
     [history, metricConfig.key],
@@ -358,24 +503,35 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
       setCatalog(catalogPayload);
 
       if (session?.token) {
-        const historyQuery = new URLSearchParams({ years: "20" });
+        const historyQuery = new URLSearchParams({ years: "10" });
         if (countyName) {
           historyQuery.set("county", countyName);
         }
         const historyResponse = await fetch(`${apiBase}/api/data/intelligence/monthly?${historyQuery}`, {
           headers: { Authorization: `Bearer ${session.token}` },
         });
+        const researchQuery = new URLSearchParams({ limit: "60" });
+        if (countyName) {
+          researchQuery.set("county", countyName);
+        }
+        const researchResponse = await fetch(`${apiBase}/api/data/research-context?${researchQuery}`, {
+          headers: { Authorization: `Bearer ${session.token}` },
+        });
         const historyPayload = await historyResponse.json();
         if (!historyResponse.ok) throw new Error(historyPayload.error || "Unable to load monthly intelligence.");
+        const researchPayload = await researchResponse.json();
+        if (!researchResponse.ok) throw new Error(researchPayload.error || "Unable to load research context.");
         setHistory(historyPayload);
+        setResearchContext(researchPayload);
         setStatus(
           countyName
-            ? `20-year monthly county intelligence loaded for ${countyName}.`
-            : "20-year monthly national intelligence loaded from aggregated county-centre records.",
+            ? `10-year monthly county intelligence loaded for ${countyName}.`
+            : "10-year monthly national intelligence loaded from aggregated county-centre records.",
         );
       } else {
         setHistory(null);
-        setStatus("Sign in to load 20-year monthly intelligence and the six-month historical outlook.");
+        setResearchContext(null);
+        setStatus("Sign in to load 10-year monthly intelligence and the six-month historical outlook.");
       }
     } catch (error) {
       setStatus(error.message || "Environmental intelligence sources could not be loaded.");
@@ -387,6 +543,101 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const apiBase = getApiBase();
+    const token = session?.token;
+    const countyParam = countyName ? encodeURIComponent(countyName) : "";
+
+    async function fetchJson(url, options = {}) {
+      const response = await fetch(url, options);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || `Provider request failed: ${url}`);
+      return payload;
+    }
+
+    async function loadLiveApiEvidence() {
+      if (!token && ["soil", "vegetation", "water", "forest"].includes(activeConsole)) {
+        setApiEvidence({ status: "idle" });
+        return;
+      }
+      setApiEvidence({ status: "loading" });
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      try {
+        const evidence = { status: "ready" };
+        const tasks = [];
+        const providerErrors = [];
+
+        const trackProvider = (label, task) => {
+          tasks.push(
+            task.catch((error) => {
+              providerErrors.push(`${label}: ${error.message || "unavailable"}`);
+            }),
+          );
+        };
+
+        if (["water", "vegetation", "forest", "county"].includes(activeConsole) && countyParam && token) {
+          trackProvider(
+            "Sentinel-2",
+            fetchJson(`${apiBase}/api/data/imagery/sentinel-2?county=${countyParam}&max_cloud=35&limit=5`, { headers })
+              .then((payload) => { evidence.sentinel = payload; }),
+          );
+        }
+
+        if (["water", "vegetation", "forest", "landuse", "county"].includes(activeConsole)) {
+          const query = countyParam ? `?county=${countyParam}&max_cloud=35&lookback_days=365` : "?max_cloud=35&lookback_days=365";
+          trackProvider(
+            "Landsat",
+            fetchJson(`${apiBase}/api/data/imagery/landsat/latest${query}`)
+              .then((payload) => { evidence.landsat = payload; }),
+          );
+        }
+
+        if (["soil", "county"].includes(activeConsole) && countyParam && token) {
+          trackProvider(
+            "SoilGrids",
+            fetchJson(`${apiBase}/api/data/soil/soilgrids?county=${countyParam}`, { headers })
+              .then((payload) => { evidence.soilgrids = payload; }),
+          );
+        }
+
+        const segmentClassesByConsole = {
+          water: ["water"],
+          forest: ["forest"],
+          landuse: ["buildings", "cropland", "forest", "water"],
+          roads: ["roads"],
+          county: ["buildings", "roads"],
+        };
+        const segmentClasses = countyParam ? (segmentClassesByConsole[activeConsole] || []) : [];
+        if (segmentClasses.length) {
+          evidence.segments = [];
+          segmentClasses.forEach((segmentClass) => {
+            trackProvider(
+              `OSM ${segmentClass}`,
+              fetchJson(`${apiBase}/api/segmentation/${segmentClass}?level=county&id=${countyParam}&limit=120`)
+                .then((payload) => { evidence.segments.push(payload); }),
+            );
+          });
+        }
+
+        await Promise.allSettled(tasks);
+        if (providerErrors.length) {
+          evidence.error = `Some live providers did not answer: ${providerErrors.slice(0, 3).join(" | ")}`;
+        }
+        if (!cancelled) setApiEvidence(evidence);
+      } catch (error) {
+        if (!cancelled) {
+          setApiEvidence({ status: "error", error: error.message || "Live API evidence unavailable." });
+        }
+      }
+    }
+
+    loadLiveApiEvidence();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConsole, countyName, session?.token]);
 
   useEffect(() => {
     setActiveConsole(defaultConsole || "rainfall");
@@ -420,15 +671,21 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
       <div className="aeis-env-console-tabs" role="tablist" aria-label="Environmental intelligence consoles">
         {CONSOLES.map((consoleItem) => {
           const Icon = consoleItem.icon;
+          const itemReadiness = history?.console_readiness?.[consoleItem.id];
+          const tone = readinessTone(itemReadiness?.status);
           return (
             <button
               key={consoleItem.id}
               type="button"
-              className={activeConsole === consoleItem.id ? `active ${consoleItem.tone}` : ""}
+              className={[
+                activeConsole === consoleItem.id ? `active ${consoleItem.tone}` : "",
+                `readiness-${tone}`,
+              ].filter(Boolean).join(" ")}
               onClick={() => setActiveConsole(consoleItem.id)}
             >
               <Icon size={17} />
               <span>{consoleItem.label}</span>
+              <em>{readinessLabel(itemReadiness?.status)}</em>
             </button>
           );
         })}
@@ -441,7 +698,7 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
           <em>{countyName ? "County-specific view" : "National reference view"}</em>
         </div>
         <div>
-          <span>20-year avg rain</span>
+          <span>10-year avg rain</span>
           <strong>{Number.isFinite(averageRain) ? `${formatNumber(averageRain, 0)} mm` : "--"}</strong>
           <em>KMD/KALRO priority, NASA fallback</em>
         </div>
@@ -512,12 +769,136 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
         </section>
       )}
 
+      {researchContext && (
+        <section className="aeis-research-context-panel" aria-label="Research context and previous happenings">
+          <div className="aeis-research-context-head">
+            <div>
+              <span className="aeis-kicker">Research context</span>
+              <h3>
+                {countyName
+                  ? `${countyName} previous happenings and local coverage`
+                  : "National previous happenings and boundary coverage"}
+              </h3>
+              <p>
+                Boundary-ready counties, sub-counties, and wards are listed with real AEIS-K records where available.
+                Empty records stay marked source-required until field reports, alerts, reports, assets, or reviewed
+                metric imports are connected.
+              </p>
+            </div>
+            <strong>
+              {researchContext.boundary_summary?.subcounties || 0} sub-counties / {researchContext.boundary_summary?.wards || 0} wards
+            </strong>
+          </div>
+
+          <div className="aeis-research-kpi-grid">
+            {[
+              ["Field reports", researchContext.coverage?.field_reports?.record_count, researchContext.coverage?.field_reports?.latest_available],
+              ["Alerts", researchContext.coverage?.alerts?.record_count, researchContext.coverage?.alerts?.latest_available],
+              ["Reports", researchContext.coverage?.reports?.record_count, researchContext.coverage?.reports?.latest_available],
+              ["Data assets", researchContext.coverage?.data_assets?.record_count, researchContext.coverage?.data_assets?.latest_available],
+              ["Monthly climate", researchContext.coverage?.monthly_climate?.record_count, researchContext.coverage?.monthly_climate?.latest_available],
+              ["Env. metrics", researchContext.coverage?.environmental_metrics?.record_count, researchContext.coverage?.environmental_metrics?.latest_available],
+            ].map(([label, value, latest]) => (
+              <div key={label}>
+                <span>{label}</span>
+                <strong>{formatNumber(value || 0)}</strong>
+                <em>{formatDate(latest)}</em>
+              </div>
+            ))}
+          </div>
+
+          <div className="aeis-research-context-grid">
+            <div className="aeis-research-list">
+              <div className="aeis-research-list-head">
+                <strong>Previous happenings</strong>
+                <span>{researchContext.previous_happenings?.length || 0} recent records</span>
+              </div>
+              {(researchContext.previous_happenings || []).length ? (
+                researchContext.previous_happenings.slice(0, 10).map((event) => (
+                  <article key={`${event.type}-${event.date}-${event.title}`}>
+                    <span>{event.type?.replaceAll("_", " ") || "record"} · {formatDate(event.date)}</span>
+                    <strong>{event.title}</strong>
+                    <em>{event.location || researchContext.scope_name} · {event.status || "recorded"}</em>
+                    {event.detail && <p>{event.detail}</p>}
+                    <small>{event.source}</small>
+                  </article>
+                ))
+              ) : (
+                <div className="aeis-research-empty">
+                  <strong>No previous operational happenings recorded yet.</strong>
+                  <span>Submit field reports, import datasets, create alerts, or publish reports to populate this list.</span>
+                </div>
+              )}
+            </div>
+
+            <div className="aeis-research-list compact">
+              <div className="aeis-research-list-head">
+                <strong>Sub-county coverage</strong>
+                <span>{researchContext.subcounties?.length || 0} listed</span>
+              </div>
+              <div className="aeis-research-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Sub-county</th>
+                      <th>Wards</th>
+                      <th>Field reports</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(researchContext.subcounties || []).slice(0, 14).map((row) => (
+                      <tr key={`${row.code}-${row.name}`}>
+                        <td>{row.name}</td>
+                        <td>{formatNumber(row.ward_count || 0)}</td>
+                        <td>{formatNumber(row.field_report_count || 0)}</td>
+                        <td>{row.status?.replaceAll("_", " ") || "boundary ready"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="aeis-research-list compact">
+              <div className="aeis-research-list-head">
+                <strong>Ward coverage</strong>
+                <span>{researchContext.wards?.length || 0} listed</span>
+              </div>
+              <div className="aeis-research-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Ward</th>
+                      <th>Sub-county</th>
+                      <th>Reports</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(researchContext.wards || []).slice(0, 14).map((row) => (
+                      <tr key={`${row.code}-${row.name}`}>
+                        <td>{row.name}</td>
+                        <td>{row.subcounty || "--"}</td>
+                        <td>{formatNumber(row.field_report_count || 0)}</td>
+                        <td>{row.status?.replaceAll("_", " ") || "boundary ready"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <p className="aeis-source-note">{researchContext.source_note}</p>
+        </section>
+      )}
+
       {activeConsole === "rainfall" ? (
         <div className="aeis-env-rainfall-grid">
           <div className="aeis-env-chart-card">
             <div className="aeis-insight-panel-head">
               <div>
-                <strong>Rainfall console: last 20 years</strong>
+                <strong>Rainfall console: last 10 years</strong>
                 <span>{history?.earliest_available || "Start"} to {history?.latest_available || "latest complete month"}</span>
               </div>
               <CloudRain size={18} />
@@ -580,6 +961,17 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
               </div>
               <active.icon size={18} />
             </div>
+            {blueprintRows.length ? (
+              <div className="aeis-console-blueprint-grid" aria-label={`${active.label} console readiness`}>
+                {blueprintRows.map((row) => (
+                  <article key={`${activeConsole}-${row.label}-${row.value}`}>
+                    <span>{row.label}</span>
+                    <strong>{row.value}</strong>
+                    <em>{row.detail}</em>
+                  </article>
+                ))}
+              </div>
+            ) : null}
             {monthlyMetric.length ? (
               <div className="aeis-env-mini-chart">
                 <div className="aeis-env-mini-chart-head">
@@ -600,8 +992,8 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
             ) : (
               <div className="aeis-insight-empty-chart">
                 <active.icon size={34} />
-                <strong>Monthly context not loaded yet.</strong>
-                <span>Connect a session and source records to populate this console.</span>
+                <strong>{active.label} console is source-gated, not blank.</strong>
+                <span>Sign in or import reviewed records to add charts; boundary and provider requirements are listed above.</span>
               </div>
             )}
             {annualMetricRows.length ? (
@@ -742,6 +1134,7 @@ export default function EnvironmentalIntelligenceHub({ session, county, onOpenAs
                 <SourceChip source={sourceBySlug.get(slug)} key={slug} />
               ))}
             </div>
+            <LiveApiEvidence evidence={apiEvidence} activeConsole={active.label} />
             <p className="aeis-source-note">
               {status}
             </p>

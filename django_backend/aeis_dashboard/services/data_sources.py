@@ -23,10 +23,13 @@ from django.db.models import Count as models_count, Max as models_max, Q
 from django.utils.text import slugify
 
 from aeis_dashboard.models import (
+    Alert,
     DataAsset,
     DataQualityAssessment,
     EnvironmentalMetricObservation,
     ExternalDataSource,
+    FieldReport,
+    IntelligenceReport,
     MonthlyClimateObservation,
 )
 
@@ -39,6 +42,7 @@ LANDSAT_STAC_SEARCH_URL = "https://landsatlook.usgs.gov/stac-server/search"
 DEAFRICA_STAC_SEARCH_URL = "https://explorer.digitalearth.africa/stac/search"
 DEAFRICA_WMS_URL = "https://ows.digitalearth.africa/wms"
 DEAFRICA_WMS_CAPABILITIES_URL = f"{DEAFRICA_WMS_URL}?service=WMS&request=GetCapabilities&version=1.3.0"
+SOILGRIDS_PROPERTIES_URL = "https://rest.isric.org/soilgrids/v2.0/properties/query"
 MAX_HISTORY_DAYS = 366 * 22
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 GEOJSON_PARSE_LIMIT = 30 * 1024 * 1024
@@ -153,6 +157,40 @@ BUILTIN_SOURCES = [
         "description": "Preferred local agro-weather and advisory source when KALRO/KAOP data access is available. Use for county and crop-zone weather context after an API key, data-sharing agreement, or reviewed export is connected.",
     },
     {
+        "slug": "county-field-site-registry",
+        "name": "County field and site registry",
+        "provider": "County Government / Ministry of Agriculture",
+        "source_type": "registry",
+        "coverage_start": None,
+        "coverage_end": None,
+        "latest_available": "county-dependent",
+        "requires_auth": False,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "nakuru_county": "https://www.nakuru.go.ke/",
+            "upload": "/api/data/assets/upload",
+        },
+        "description": "Verified county field, farm, irrigation, soil-test, site-boundary, and mapped-area records. Import reviewed CSV/GeoJSON/GPKG records before publishing county site counts or mapped area.",
+    },
+    {
+        "slug": "moald-kamis-kiamis",
+        "name": "MoALD KAMIS/KIAMIS agricultural registry feeds",
+        "provider": "Ministry of Agriculture and Livestock Development",
+        "source_type": "registry",
+        "coverage_start": None,
+        "coverage_end": None,
+        "latest_available": "access-dependent",
+        "requires_auth": True,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "ministry": "https://kilimo.go.ke/",
+            "upload": "/api/data/assets/upload",
+        },
+        "description": "Potential official farmer/site/production registry source. Connect only after authorized access or reviewed exports are available.",
+    },
+    {
         "slug": "nasa-power",
         "name": "NASA POWER climate history",
         "provider": "NASA Langley Research Center",
@@ -222,6 +260,23 @@ BUILTIN_SOURCES = [
         "description": "Provider-rendered NDVI, NDWI, and land-surface-temperature tile layers.",
     },
     {
+        "slug": "dynamic-world",
+        "name": "Dynamic World near-real-time land cover",
+        "provider": "Google / World Resources Institute",
+        "source_type": "landcover",
+        "coverage_start": "2015-06-27",
+        "coverage_end": None,
+        "latest_available": "near-real-time",
+        "requires_auth": True,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "documentation": "https://developers.google.com/earth-engine/datasets/catalog/GOOGLE_DYNAMICWORLD_V1",
+            "metric_import": "/api/data/intelligence/metrics",
+        },
+        "description": "Near-real-time global land-cover probabilities derived from Sentinel-2. Use reviewed zonal statistics before publishing land-use percentages.",
+    },
+    {
         "slug": "knbs-statistical-portals",
         "name": "KNBS statistical and county data portals",
         "provider": "Kenya National Bureau of Statistics",
@@ -279,8 +334,9 @@ BUILTIN_SOURCES = [
         "latest_available": "current model",
         "requires_auth": False,
         "enabled": True,
-        "access": "source_required",
+        "access": "connected_catalogue",
         "endpoints": {
+            "point": "/api/data/soil/soilgrids",
             "documentation": "https://soilgrids.org/",
         },
         "description": "Global gridded soil organic carbon, texture, pH, bulk density, and related soil-property layers.",
@@ -295,8 +351,9 @@ BUILTIN_SOURCES = [
         "latest_available": "community-updated",
         "requires_auth": False,
         "enabled": True,
-        "access": "source_required",
+        "access": "connected_catalogue",
         "endpoints": {
+            "segmentation": "/api/segmentation/roads",
             "documentation": "https://wiki.openstreetmap.org/wiki/Map_features#Highway",
         },
         "description": "Road geometry and tags for highway class, surface, and access. Use with QA before publishing tarmac/all-weather road metrics.",
@@ -1298,6 +1355,301 @@ def environmental_metrics(query) -> dict:
     return summary
 
 
+def _scope_filter(queryset, field_name: str, scope_name: str):
+    if not scope_name:
+        return queryset
+    return queryset.filter(**{f"{field_name}__iexact": scope_name})
+
+
+def _boundary_context(county: str = "") -> dict:
+    county_feature = domain.find_county(county) if county else None
+    if county and not county_feature:
+        raise DataSourceError("County not found.", 404)
+    scope_name = domain.county_name(county_feature) if county_feature else "Kenya"
+    scope_code = domain.county_code(county_feature) if county_feature else ""
+
+    if county_feature:
+        subcounty_features = [
+            feature
+            for feature in domain.subcounties()
+            if (feature.get("properties") or {}).get("ADM1_EN") == scope_name
+        ]
+        ward_features = [
+            feature
+            for feature in domain.wards()
+            if (feature.get("properties") or {}).get("ADM1_EN") == scope_name
+        ]
+        if not ward_features:
+            county_bounds = domain.bbox(county_feature)
+            ward_features = [
+                feature
+                for feature in domain.wards()
+                if domain.point_in_bbox(domain.feature_center(feature), county_bounds)
+                and domain.point_in_feature(domain.feature_center(feature), county_feature)
+            ]
+    else:
+        subcounty_features = domain.subcounties()
+        ward_features = domain.wards()
+
+    subcounty_rows = []
+    ward_count_by_subcounty: dict[str, int] = {}
+    for ward in ward_features:
+        properties = ward.get("properties") or {}
+        parent = properties.get("ADM2_EN") or properties.get("SubCounty") or ""
+        if parent:
+            ward_count_by_subcounty[parent] = ward_count_by_subcounty.get(parent, 0) + 1
+
+    for feature in subcounty_features:
+        name = domain.subcounty_name(feature)
+        subcounty_rows.append(
+            {
+                "name": name,
+                "code": domain.subcounty_code(feature),
+                "county": (feature.get("properties") or {}).get("ADM1_EN") or scope_name,
+                "area_km2": round(domain.estimate_area_ha(feature) / 100, 2),
+                "ward_count": ward_count_by_subcounty.get(name, 0),
+                "status": "boundary_ready",
+            }
+        )
+    subcounty_rows.sort(key=lambda row: (row["county"], row["name"]))
+
+    ward_rows = [
+        {
+            "name": domain.ward_name(feature),
+            "code": domain.ward_code(feature),
+            "subcounty": (feature.get("properties") or {}).get("ADM2_EN") or (feature.get("properties") or {}).get("SubCounty") or "",
+            "county": (feature.get("properties") or {}).get("ADM1_EN") or scope_name,
+            "area_km2": round(domain.estimate_area_ha(feature) / 100, 2),
+            "status": "boundary_ready",
+        }
+        for feature in ward_features
+    ]
+    ward_rows.sort(key=lambda row: (row["county"], row["subcounty"], row["name"]))
+
+    county_rows = [
+        {
+            "name": domain.county_name(feature),
+            "code": domain.county_code(feature),
+            "area_km2": round(domain.estimate_area_ha(feature) / 100, 2),
+            "subcounty_count": domain.county_subcounty_count(domain.county_name(feature)),
+            "ward_count": domain.ward_count_for_county(feature),
+            "status": "boundary_ready",
+        }
+        for feature in (domain.counties() if not county_feature else [county_feature])
+    ]
+
+    return {
+        "scope": "county" if county_feature else "national",
+        "scope_name": scope_name,
+        "scope_code": scope_code,
+        "counties": county_rows,
+        "subcounties": subcounty_rows,
+        "wards": ward_rows,
+        "summary": {
+            "counties": len(county_rows),
+            "subcounties": len(subcounty_rows),
+            "wards": len(ward_rows),
+        },
+    }
+
+
+def _field_report_event(row: FieldReport) -> dict:
+    location = " / ".join(
+        part
+        for part in [row.county_name, row.subcounty_name, row.ward_name]
+        if part
+    )
+    return {
+        "type": "field_report",
+        "title": row.title,
+        "date": row.observation_date.isoformat(),
+        "location": location or row.county_name,
+        "county": row.county_name,
+        "subcounty": row.subcounty_name,
+        "ward": row.ward_name,
+        "status": row.verification_status,
+        "detail": row.observations[:260],
+        "source": "AEIS-K field report",
+    }
+
+
+def _alert_event(row: Alert) -> dict:
+    return {
+        "type": "alert",
+        "title": row.title,
+        "date": row.created_at.date().isoformat(),
+        "location": row.scope_name or "National",
+        "status": row.status,
+        "severity": row.severity,
+        "detail": row.description[:260],
+        "source": ", ".join(row.data_sources[:2]) if row.data_sources else "AEIS-K operational alert",
+    }
+
+
+def _report_event(row: IntelligenceReport) -> dict:
+    return {
+        "type": "intelligence_report",
+        "title": row.title,
+        "date": row.updated_at.date().isoformat(),
+        "location": row.scope_name or "Kenya",
+        "status": row.status,
+        "severity": row.risk_level,
+        "detail": (row.ai_summary or str((row.content or {}).get("executive_summary") or ""))[:260],
+        "source": "AEIS-K intelligence report",
+    }
+
+
+def _asset_event(row: DataAsset) -> dict:
+    quality = getattr(row, "quality", None)
+    return {
+        "type": "data_asset",
+        "title": row.name,
+        "date": (row.acquisition_end or row.acquisition_start or row.created_at.date()).isoformat(),
+        "location": row.scope_name or row.scope_level,
+        "status": row.status,
+        "severity": getattr(quality, "confidence", ""),
+        "detail": f"{row.asset_type} {row.file_format} asset; {row.feature_count or 'metadata'} feature count.",
+        "source": getattr(quality, "source_name", "") or "AEIS-K data asset",
+    }
+
+
+def _coverage_rows(queryset, date_field: str, scope_field: str = "scope_name") -> list[dict]:
+    rows = []
+    for row in queryset.values(scope_field).annotate(
+        record_count=models_count("id"),
+        latest=models_max(date_field),
+    ).order_by(scope_field):
+        rows.append(
+            {
+                "scope_name": row.get(scope_field) or "Unscoped",
+                "record_count": row["record_count"],
+                "latest_available": row["latest"].isoformat() if row.get("latest") else None,
+            }
+        )
+    return rows
+
+
+def research_context(query) -> dict:
+    county = str(query.get("county") or "").strip()
+    try:
+        limit = max(5, min(100, int(query.get("limit", "40") or 40)))
+    except ValueError as exc:
+        raise DataSourceError("limit must be numeric.") from exc
+    boundaries = _boundary_context(county)
+    scope_name = boundaries["scope_name"] if boundaries["scope"] == "county" else ""
+
+    field_reports = FieldReport.objects.select_related("submitted_by", "verified_by")
+    alerts = Alert.objects.all()
+    reports_qs = IntelligenceReport.objects.all()
+    assets = DataAsset.objects.select_related("quality")
+    monthly = MonthlyClimateObservation.objects.all()
+    metrics = EnvironmentalMetricObservation.objects.all()
+
+    if scope_name:
+        field_reports = field_reports.filter(county_name__iexact=scope_name)
+        alerts = alerts.filter(Q(scope_name__iexact=scope_name) | Q(scope_level="national"))
+        reports_qs = reports_qs.filter(Q(scope_name__iexact=scope_name) | Q(scope_level="national"))
+        assets = assets.filter(Q(scope_name__iexact=scope_name) | Q(scope_level="national"))
+        monthly = monthly.filter(county_name__iexact=scope_name)
+        metrics = metrics.filter(Q(scope_name__iexact=scope_name) | Q(scope_level="national"))
+
+    events = [
+        *[_field_report_event(row) for row in field_reports[:limit]],
+        *[_alert_event(row) for row in alerts[:limit]],
+        *[_report_event(row) for row in reports_qs[:limit]],
+        *[_asset_event(row) for row in assets[:limit]],
+    ]
+    events.sort(key=lambda row: row.get("date") or "", reverse=True)
+
+    subcounty_activity = []
+    if scope_name:
+        report_counts = {
+            row["subcounty_name"] or "Unspecified": row["count"]
+            for row in field_reports.values("subcounty_name").annotate(count=models_count("id"))
+        }
+        for row in boundaries["subcounties"][:80]:
+            subcounty_activity.append(
+                {
+                    **row,
+                    "field_report_count": report_counts.get(row["name"], 0),
+                    "status": "has_field_reports" if report_counts.get(row["name"], 0) else "boundary_ready_source_required",
+                }
+            )
+
+    ward_activity = []
+    if scope_name:
+        report_counts = {
+            row["ward_name"] or "Unspecified": row["count"]
+            for row in field_reports.values("ward_name").annotate(count=models_count("id"))
+        }
+        for row in boundaries["wards"][:120]:
+            ward_activity.append(
+                {
+                    **row,
+                    "field_report_count": report_counts.get(row["name"], 0),
+                    "status": "has_field_reports" if report_counts.get(row["name"], 0) else "boundary_ready_source_required",
+                }
+            )
+
+    latest_month = monthly.order_by("-observation_month").first()
+    latest_metric = metrics.order_by("-period_end").first()
+    return {
+        "scope": boundaries["scope"],
+        "scope_name": boundaries["scope_name"],
+        "scope_code": boundaries["scope_code"],
+        "boundary_summary": boundaries["summary"],
+        "counties": boundaries["counties"],
+        "subcounties": subcounty_activity or boundaries["subcounties"][:80],
+        "wards": ward_activity or boundaries["wards"][:120],
+        "previous_happenings": events[:limit],
+        "coverage": {
+            "field_reports": {
+                "record_count": field_reports.count(),
+                "verified_count": field_reports.filter(verification_status=FieldReport.VerificationStatus.VERIFIED).count(),
+                "latest_available": field_reports.order_by("-observation_date").first().observation_date.isoformat()
+                if field_reports.exists()
+                else None,
+                "by_subcounty": _coverage_rows(field_reports, "observation_date", "subcounty_name")[:40],
+                "by_ward": _coverage_rows(field_reports, "observation_date", "ward_name")[:60],
+            },
+            "alerts": {
+                "record_count": alerts.count(),
+                "open_count": alerts.exclude(status=Alert.Status.RESOLVED).count(),
+                "latest_available": alerts.order_by("-created_at").first().created_at.date().isoformat()
+                if alerts.exists()
+                else None,
+            },
+            "reports": {
+                "record_count": reports_qs.count(),
+                "published_count": reports_qs.filter(status=IntelligenceReport.Status.PUBLISHED).count(),
+                "latest_available": reports_qs.order_by("-updated_at").first().updated_at.date().isoformat()
+                if reports_qs.exists()
+                else None,
+            },
+            "data_assets": {
+                "record_count": assets.count(),
+                "latest_available": assets.order_by("-created_at").first().created_at.date().isoformat()
+                if assets.exists()
+                else None,
+            },
+            "monthly_climate": {
+                "record_count": monthly.count(),
+                "latest_available": latest_month.observation_month.isoformat() if latest_month else None,
+            },
+            "environmental_metrics": {
+                "record_count": metrics.count(),
+                "latest_available": latest_metric.period_end.isoformat() if latest_metric else None,
+            },
+        },
+        "source_note": (
+            "Research context combines official boundary files with AEIS-K alerts, reports, field reports, data assets, "
+            "reviewed monthly climate records, and imported environmental metrics. Empty sub-county or ward records are "
+            "shown as boundary-ready/source-required rather than filled with invented events."
+        ),
+        "generated_at": domain.now_iso(),
+    }
+
+
 def sentinel_2_search(query) -> dict:
     today = date.today()
     start = _parse_date(query.get("start"), today - timedelta(days=3652))
@@ -1496,6 +1848,106 @@ def landsat_latest(query) -> dict:
         "search_start": start.isoformat(),
         "search_end": end.isoformat(),
         "max_cloud": max_cloud,
+        "generated_at": domain.now_iso(),
+    }
+
+
+def _soilgrids_value(layer: dict, depth_label: str = "0-5cm") -> float | None:
+    unit = layer.get("unit_measure") or {}
+    divisor = float(unit.get("d_factor") or 1)
+    if not math.isfinite(divisor) or divisor == 0:
+        divisor = 1
+    for depth in layer.get("depths") or []:
+        if depth.get("label") != depth_label:
+            continue
+        value = (depth.get("values") or {}).get("mean")
+        if value is None:
+            return None
+        try:
+            number = float(value) / divisor
+        except (TypeError, ValueError):
+            return None
+        return number if math.isfinite(number) else None
+    return None
+
+
+def soilgrids_point(query) -> dict:
+    county = str(query.get("county") or "").strip()
+    scope_name = "Custom point"
+    scope_code = ""
+    if county:
+        feature = domain.find_county(county)
+        if not feature:
+            raise DataSourceError("County not found.", 404)
+        latitude, longitude = domain.county_weather_center(feature)
+        scope_name = domain.county_name(feature)
+        scope_code = domain.county_code(feature)
+    else:
+        try:
+            latitude = float(query.get("lat") or query.get("latitude"))
+            longitude = float(query.get("lon") or query.get("longitude"))
+        except (TypeError, ValueError) as exc:
+            raise DataSourceError("Provide a valid county or numeric lat/lon for SoilGrids.") from exc
+
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        raise DataSourceError("SoilGrids latitude/longitude is out of range.")
+
+    params = {
+        "lon": f"{longitude:.6f}",
+        "lat": f"{latitude:.6f}",
+        "property": ["phh2o", "soc"],
+        "depth": str(query.get("depth") or "0-5cm"),
+        "value": "mean",
+    }
+    encoded = urlencode(params, doseq=True)
+    cache_key = f"soilgrids:{hashlib.sha256(encoded.encode()).hexdigest()}"
+    payload = cache.get(cache_key)
+    if payload is None:
+        try:
+            request = Request(
+                f"{SOILGRIDS_PROPERTIES_URL}?{encoded}",
+                headers={"User-Agent": "AEIS-K/1.0 SoilGrids point connector"},
+            )
+            with urlopen(request, timeout=12) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise DataSourceError(f"SoilGrids rejected the request: {detail[:300]}", 502) from exc
+        except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            raise DataSourceError(f"SoilGrids is unavailable: {exc}", 503) from exc
+        cache.set(cache_key, payload, 86400)
+
+    layers = {layer.get("name"): layer for layer in (payload.get("properties") or {}).get("layers") or []}
+    depth = str(query.get("depth") or "0-5cm")
+    ph = _soilgrids_value(layers.get("phh2o") or {}, depth)
+    soc_g_kg = _soilgrids_value(layers.get("soc") or {}, depth)
+    clay_g_kg = _soilgrids_value(layers.get("clay") or {}, depth)
+    sand_g_kg = _soilgrids_value(layers.get("sand") or {}, depth)
+    silt_g_kg = _soilgrids_value(layers.get("silt") or {}, depth)
+    bulk_density = _soilgrids_value(layers.get("bdod") or {}, depth)
+
+    properties = {
+        "soil_ph": round(ph, 2) if ph is not None else None,
+        "soil_organic_carbon_g_kg": round(soc_g_kg, 2) if soc_g_kg is not None else None,
+        "soil_organic_carbon_pct": round(soc_g_kg / 10, 2) if soc_g_kg is not None else None,
+        "clay_g_kg": round(clay_g_kg, 1) if clay_g_kg is not None else None,
+        "sand_g_kg": round(sand_g_kg, 1) if sand_g_kg is not None else None,
+        "silt_g_kg": round(silt_g_kg, 1) if silt_g_kg is not None else None,
+        "bulk_density_cg_cm3": round(bulk_density, 1) if bulk_density is not None else None,
+    }
+    has_values = any(value is not None for value in properties.values())
+    return {
+        "provider": "ISRIC SoilGrids",
+        "source_url": SOILGRIDS_PROPERTIES_URL,
+        "scope": scope_name,
+        "scope_code": scope_code,
+        "latitude": latitude,
+        "longitude": longitude,
+        "depth": depth,
+        "status": "source_backed" if has_values else "no_model_value_at_point",
+        "properties": properties,
+        "raw_layers": list(layers),
+        "method": "SoilGrids point estimate at county centre; not an area-weighted county zonal statistic.",
         "generated_at": domain.now_iso(),
     }
 

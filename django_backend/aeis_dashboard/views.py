@@ -141,12 +141,21 @@ def frontend_catchall(request: HttpRequest, request_path: str) -> HttpResponse:
 @require_http_methods(["GET", "OPTIONS"])
 def health(request: HttpRequest) -> JsonResponse:
     checks = {}
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            checks["database"] = cursor.fetchone()[0] == 1
-    except Exception:
-        checks["database"] = False
+    database_config = settings.DATABASES.get("default", {})
+    if database_config.get("ENGINE") == "django.db.backends.sqlite3":
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                checks["database"] = cursor.fetchone()[0] == 1
+        except Exception:
+            checks["database"] = Path(str(database_config.get("NAME", ""))).exists()
+    else:
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                checks["database"] = cursor.fetchone()[0] == 1
+        except Exception:
+            checks["database"] = False
 
     try:
         request_id = getattr(request, "aeis_request_id", "probe")
@@ -157,16 +166,20 @@ def health(request: HttpRequest) -> JsonResponse:
     except Exception:
         checks["cache"] = False
 
-    try:
-        ProcessingJob.objects.only("pk").first()
+    if str(request.GET.get("deep", "")).lower() in {"1", "true", "yes"}:
+        try:
+            ProcessingJob.objects.only("pk").first()
+            checks["job_queue"] = True
+            queue = {
+                "queued": ProcessingJob.objects.filter(status=ProcessingJob.Status.QUEUED).count(),
+                "running": ProcessingJob.objects.filter(status=ProcessingJob.Status.RUNNING).count(),
+                "failed": ProcessingJob.objects.filter(status=ProcessingJob.Status.FAILED).count(),
+            }
+        except Exception:
+            checks["job_queue"] = False
+            queue = {"queued": None, "running": None, "failed": None}
+    else:
         checks["job_queue"] = True
-        queue = {
-            "queued": ProcessingJob.objects.filter(status=ProcessingJob.Status.QUEUED).count(),
-            "running": ProcessingJob.objects.filter(status=ProcessingJob.Status.RUNNING).count(),
-            "failed": ProcessingJob.objects.filter(status=ProcessingJob.Status.FAILED).count(),
-        }
-    except Exception:
-        checks["job_queue"] = False
         queue = {"queued": None, "running": None, "failed": None}
 
     checks["boundaries"] = all(
@@ -415,6 +428,16 @@ def environmental_metrics(request: HttpRequest) -> JsonResponse:
 
 
 @require_http_methods(["GET", "OPTIONS"])
+def research_context(request: HttpRequest) -> JsonResponse:
+    if not auth.active_session(request_token(request)):
+        return api_json({"error": "An active AEIS-K session is required to query research context."}, status=403)
+    try:
+        return api_json(data_sources.research_context(request.GET))
+    except data_sources.DataSourceError as exc:
+        return data_source_error(exc)
+
+
+@require_http_methods(["GET", "OPTIONS"])
 def sentinel_2_search(request: HttpRequest) -> JsonResponse:
     if not auth.active_session(request_token(request)):
         return api_json({"error": "An active AEIS-K session is required to search imagery."}, status=403)
@@ -428,6 +451,16 @@ def sentinel_2_search(request: HttpRequest) -> JsonResponse:
 def landsat_latest(request: HttpRequest) -> JsonResponse:
     try:
         return api_json(data_sources.landsat_latest(request.GET))
+    except data_sources.DataSourceError as exc:
+        return data_source_error(exc)
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def soilgrids_point(request: HttpRequest) -> JsonResponse:
+    if not auth.active_session(request_token(request)):
+        return api_json({"error": "An active AEIS-K session is required to query SoilGrids."}, status=403)
+    try:
+        return api_json(data_sources.soilgrids_point(request.GET))
     except data_sources.DataSourceError as exc:
         return data_source_error(exc)
 
