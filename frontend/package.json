@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../aeis.ps1 dev-frontend",
+    "dev": "vite --host 0.0.0.0",
     "dev:raw": "vite --host 0.0.0.0",
     "dev:local": "vite --host 127.0.0.1",
     "build": "vite build"
