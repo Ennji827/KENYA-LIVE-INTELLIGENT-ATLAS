@@ -5,8 +5,13 @@ import { TOPICS, nationalValue, formatValue, SOURCE_STATUS_LABEL } from "../data
 const CATEGORIES = ["All", ...Array.from(new Set(TOPICS.map((t) => t.category)))];
 
 // The single hub page: category tabs + all eight topics as clickable cards.
-export default function IntelHub({ onOpenTopic }) {
+export default function IntelHub({ onOpenTopic, user, onSignOut }) {
   const [tab, setTab] = useState("All");
+
+  const displayName =
+    user && (user.first_name || user.name || user.email)
+      ? user.first_name || user.name || user.email
+      : null;
 
   const visible = useMemo(
     () => (tab === "All" ? TOPICS : TOPICS.filter((t) => t.category === tab)),
@@ -16,7 +21,29 @@ export default function IntelHub({ onOpenTopic }) {
   return (
     <div className="hub">
       <header className="hub__hero">
-        <div className="hub__eyebrow">AEIS-K · Critical Intelligence System</div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div className="hub__eyebrow">AEIS-K · Critical Intelligence System</div>
+          {onSignOut && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {displayName && (
+                <span className="hub__eyebrow" style={{ opacity: 0.85 }}>
+                  Signed in as {displayName}
+                </span>
+              )}
+              <button type="button" className="btn btn--ghost" onClick={onSignOut}>
+                Sign out
+              </button>
+            </div>
+          )}
+        </div>
         <h1>National Intelligence Hub</h1>
         <p>
           Live geospatial intelligence for decision makers and researchers.
