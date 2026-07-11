@@ -36,7 +36,7 @@ For permanent automatic startup after Windows logon:
 The control script installs missing requirements, runs migrations, builds the frontend, starts Django/Waitress and the processing worker, prevents duplicate servers, and can register an auto-restarting Windows scheduled task.
 
 - Dashboard and API: `http://127.0.0.1:8000`
-- Runtime database: `.runtime/aeis.sqlite3`
+- Runtime database: `%LOCALAPPDATA%\AEIS-K\aeis-live.sqlite3` by default on Windows, or `AEIS_DB_PATH` when set
 - Runtime cache: `.runtime/cache`
 - Server concurrency: 12 Waitress request threads
 - Durable worker: database-backed AI and report processing outside request threads
