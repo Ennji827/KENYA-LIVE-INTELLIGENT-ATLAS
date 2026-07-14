@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -10,6 +10,8 @@ import {
 } from "recharts";
 import TopicMap from "../components/TopicMap";
 import InsightPanel from "../components/InsightPanel";
+import PaymentGateway from "../components/PaymentGateway";
+import LiveWeatherStrip from "../components/LiveWeatherStrip";
 import {
   getTopic,
   regionValue,
@@ -19,6 +21,10 @@ import {
   SOURCE_STATUS_LABEL,
 } from "../data/topics";
 import { buildReport, reportToCsv, downloadText, scopeLabel } from "../utils/intel";
+import { fetchOsmMetric } from "../utils/apiClient";
+
+// Topics backed by a live OpenStreetMap feed (per-county, national scope).
+const OSM_TOPICS = new Set(["roads", "forests", "water_bodies"]);
 
 // The drill-down workspace for one topic: map + ranked regions + charts +
 // reports + AI insights, navigable National -> County -> Sub-county.
@@ -27,6 +33,7 @@ export default function TopicWorkspace({
   initialScope,
   onBackToHub,
   onChangeArea,
+  user,
 }) {
   const topic = getTopic(topicId);
   const [scope, setScope] = useState(
@@ -34,6 +41,48 @@ export default function TopicWorkspace({
   );
   const [regions, setRegions] = useState([]);
   const [report, setReport] = useState(null);
+  // Live per-county values from OpenStreetMap for supported topics; null means
+  // "use scaffolding". `live` flags that at least one real value arrived.
+  const [liveValues, setLiveValues] = useState(null);
+  const [liveState, setLiveState] = useState("idle"); // idle | loading | live | error
+
+  // Fetch live values only for supported topics at national scope. County/
+  // sub-county drill-downs stay on scaffolding for now.
+  useEffect(() => {
+    if (!OSM_TOPICS.has(topicId) || scope.level !== "national") {
+      setLiveValues(null);
+      setLiveState("idle");
+      return;
+    }
+    let cancelled = false;
+    setLiveState("loading");
+    fetchOsmMetric(topicId)
+      .then((data) => {
+        if (cancelled) return;
+        const map = {};
+        (data.regions || []).forEach((r) => {
+          if (r?.name && typeof r.value === "number") map[r.name] = r.value;
+        });
+        setLiveValues(Object.keys(map).length ? map : null);
+        setLiveState(Object.keys(map).length ? "live" : "error");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLiveValues(null);
+        setLiveState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [topicId, scope.level]);
+  // Report generation is gated behind an M-PESA payment. Clicking "Generate
+  // report" opens the gateway; a successful payment builds and reveals it.
+  const [showPayment, setShowPayment] = useState(false);
+
+  const handlePaid = () => {
+    setShowPayment(false);
+    setReport(buildReport(topicId, scope, regions));
+  };
 
   // The map renders national counties, or the sub-counties of the active county.
   const mapLevel = scope.level === "national" ? "national" : "county";
@@ -108,7 +157,7 @@ export default function TopicWorkspace({
           )}
           <button
             className="btn btn--ghost"
-            onClick={() => setReport(buildReport(topicId, scope, regions))}
+            onClick={() => setShowPayment(true)}
           >
             Generate report
           </button>
@@ -126,9 +175,19 @@ export default function TopicWorkspace({
         </div>
         <div className="summary-value">{formatValue(topicId, headline)}</div>
         <div className="summary-status">
-          <span className="dot" /> {SOURCE_STATUS_LABEL}
+          <span className="dot" />{" "}
+          {liveState === "live"
+            ? "Live · OpenStreetMap (per-county)"
+            : liveState === "loading"
+            ? "Loading live OpenStreetMap data…"
+            : SOURCE_STATUS_LABEL}
         </div>
       </div>
+
+      {/* Live feed for topics backed by a connected source (weather/rainfall). */}
+      {(topicId === "weather" || topicId === "rainfall") && (
+        <LiveWeatherStrip county={scope.county} />
+      )}
 
       <div className="workspace__grid">
         {/* Map */}
@@ -150,6 +209,7 @@ export default function TopicWorkspace({
             }
             onDrill={handleDrill}
             onRegionsLoaded={setRegions}
+            liveValues={liveValues}
           />
         </section>
 
@@ -227,6 +287,15 @@ export default function TopicWorkspace({
           <InsightPanel topicId={topicId} scope={scope} regions={regions} />
         </section>
       </div>
+
+      {showPayment && (
+        <PaymentGateway
+          user={user}
+          description={`${topic.label} report · ${scopeLabel(scope)}`}
+          onPaid={handlePaid}
+          onClose={() => setShowPayment(false)}
+        />
+      )}
 
       {report && (
         <ReportModal

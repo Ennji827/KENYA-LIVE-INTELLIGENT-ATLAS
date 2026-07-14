@@ -122,6 +122,23 @@ else:
     }
 
 CORS_ALLOWED_ORIGIN = os.environ.get("AEIS_CORS_ALLOWED_ORIGIN", "").strip()
+
+# ── M-PESA / Safaricom Daraja payment gateway ───────────────────────────
+# When the consumer key/secret/passkey are absent the payment service runs
+# in simulation mode so the report-payment flow is fully demoable.
+MPESA_ENV = os.environ.get("AEIS_MPESA_ENV", "sandbox").strip().lower()
+MPESA_CONSUMER_KEY = os.environ.get("AEIS_MPESA_CONSUMER_KEY", "").strip()
+MPESA_CONSUMER_SECRET = os.environ.get("AEIS_MPESA_CONSUMER_SECRET", "").strip()
+MPESA_SHORTCODE = os.environ.get("AEIS_MPESA_SHORTCODE", "174379").strip()
+MPESA_PAYBILL = os.environ.get("AEIS_MPESA_PAYBILL", "").strip() or MPESA_SHORTCODE
+MPESA_PASSKEY = os.environ.get("AEIS_MPESA_PASSKEY", "").strip()
+MPESA_CALLBACK_URL = os.environ.get("AEIS_MPESA_CALLBACK_URL", "").strip()
+MPESA_ACCOUNT_PREFIX = os.environ.get("AEIS_MPESA_ACCOUNT_PREFIX", "AEISK").strip()
+MPESA_BUSINESS_NAME = os.environ.get("AEIS_MPESA_BUSINESS_NAME", "Kenya Space Agency").strip()
+try:
+    REPORT_PRICE_KES = int(os.environ.get("AEIS_REPORT_PRICE_KES", "50"))
+except ValueError:
+    REPORT_PRICE_KES = 50
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 110 * 1024 * 1024
 

@@ -1,0 +1,315 @@
+/* M-PESA payment gateway — branded modal shown before a report unlocks. */
+:root {
+  --mpesa-green: #43b02a;
+  --mpesa-green-dark: #2e7d1e;
+  --mpesa-red: #e11a2c;
+}
+
+.pay {
+  background: var(--glass-bg-strong, var(--surface));
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  backdrop-filter: blur(24px) saturate(150%);
+  border: 1px solid var(--glass-border, var(--line));
+  border-radius: 20px;
+  max-width: 440px;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 30px 70px rgba(15, 23, 42, 0.3);
+  color: var(--ink);
+}
+
+/* Header carries the M-PESA green so the brand reads instantly. */
+.pay__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, var(--mpesa-green) 0%, var(--mpesa-green-dark) 100%);
+  color: #fff;
+}
+
+.pay__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pay__brand-title {
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+}
+
+.pay__brand-sub {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.pay__close {
+  background: rgba(255, 255, 255, 0.18);
+  border: none;
+  color: #fff;
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.pay__close:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+/* M-PESA logo lockup (text mark) */
+.mpesa-mark {
+  display: inline-flex;
+  align-items: center;
+  background: #fff;
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-weight: 900;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+.mpesa-mark__m {
+  color: var(--mpesa-red);
+}
+.mpesa-mark__pesa {
+  color: var(--mpesa-green);
+}
+
+.pay__amount {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 20px;
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+.pay__amount-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pay__amount-value {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.pay__amount-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pay__tabs {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px 0;
+}
+.pay__tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.pay__tab:hover {
+  color: var(--ink);
+}
+.pay__tab.is-active {
+  border-color: var(--mpesa-green);
+  color: var(--mpesa-green-dark);
+  background: rgba(67, 176, 42, 0.08);
+}
+
+.pay__body {
+  padding: 16px 20px 20px;
+}
+
+.pay__label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.pay__input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.pay__input:focus {
+  border-color: var(--mpesa-green);
+  box-shadow: 0 0 0 3px rgba(67, 176, 42, 0.18);
+}
+.pay__input:disabled {
+  opacity: 0.6;
+}
+.pay__note {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 10px 0 4px;
+  line-height: 1.5;
+}
+
+.pay__steps {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.6;
+}
+.pay__steps li {
+  margin-bottom: 6px;
+}
+
+.pay__copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: var(--surface);
+}
+.pay__copy-meta {
+  display: flex;
+  flex-direction: column;
+}
+.pay__copy-label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.pay__copy-value {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+.pay__copy-btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--mpesa-green-dark);
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+.pay__copy-btn:hover {
+  background: rgba(67, 176, 42, 0.1);
+}
+
+.pay__cta {
+  width: 100%;
+  margin-top: 14px;
+  padding: 13px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, var(--mpesa-green) 0%, var(--mpesa-green-dark) 100%);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: filter 0.15s ease, transform 0.05s ease;
+}
+.pay__cta:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.pay__cta:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.pay__cta:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.pay__alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 12px 20px 0;
+}
+.pay__body .pay__alert {
+  margin: 12px 0 0;
+}
+.pay__alert--info {
+  background: rgba(29, 78, 216, 0.08);
+  color: var(--brand);
+}
+.pay__alert--ok {
+  background: rgba(67, 176, 42, 0.12);
+  color: var(--mpesa-green-dark);
+}
+.pay__alert--error {
+  background: rgba(225, 26, 44, 0.1);
+  color: var(--mpesa-red);
+}
+
+.pay__secure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+
+.pay__spin {
+  animation: pay-spin 0.9s linear infinite;
+}
+@keyframes pay-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+:root[data-theme="dark"] .pay__tab.is-active {
+  color: #7ed36a;
+}
+:root[data-theme="dark"] .pay__copy-btn {
+  color: #7ed36a;
+}
+:root[data-theme="dark"] .pay__alert--ok {
+  color: #7ed36a;
+}

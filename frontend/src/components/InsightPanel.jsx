@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { getApiBase } from "../utils/api";
+import React, { useEffect, useState } from "react";
+import { postIntelligenceQuery, fetchIntelligenceStatus } from "../utils/apiClient";
 import { localInsights, scopeLabel } from "../utils/intel";
 import { getTopic } from "../data/topics";
 
@@ -21,6 +21,24 @@ export default function InsightPanel({ topicId, scope, regions }) {
   const [insights, setInsights] = useState(null);
   const [source, setSource] = useState(null); // "model" | "local"
   const [loading, setLoading] = useState(false);
+  // Live provider state from /api/intelligence/status (null until known/failed).
+  const [provider, setProvider] = useState(null);
+
+  // Probe the intelligence provider once so the panel can show whether answers
+  // will come from the hosted model or the local rule-based fallback.
+  useEffect(() => {
+    let cancelled = false;
+    fetchIntelligenceStatus()
+      .then((status) => {
+        if (!cancelled) setProvider(status?.provider || null);
+      })
+      .catch(() => {
+        if (!cancelled) setProvider(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function analyze(q) {
     const query = (q ?? question).trim();
@@ -36,23 +54,18 @@ export default function InsightPanel({ topicId, scope, regions }) {
     };
 
     try {
-      const response = await fetch(`${getApiBase()}/api/intelligence/query`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: query, workspace }),
-      });
-      if (response.ok) {
-        const payload = await response.json();
-        const modelInsights = normalizeModelResponse(payload);
-        if (modelInsights.length) {
-          setInsights(modelInsights);
-          setSource("model");
-          setLoading(false);
-          return;
-        }
+      // Now sent with the session bearer token via apiClient, so the backend
+      // model path is actually reachable (previously always 403'd → local).
+      const payload = await postIntelligenceQuery({ question: query, workspace });
+      const modelInsights = normalizeModelResponse(payload);
+      if (modelInsights.length) {
+        setInsights(modelInsights);
+        setSource("model");
+        setLoading(false);
+        return;
       }
     } catch {
-      // Fall through to local analysis.
+      // Fall through to local analysis (backend offline or role not permitted).
     }
 
     setInsights(localInsights(topicId, scope, regions, query));
@@ -69,6 +82,14 @@ export default function InsightPanel({ topicId, scope, regions }) {
           <strong>{topic.label}</strong> at <strong>{scopeLabel(scope)}</strong>{" "}
           — and explains its reasoning.
         </p>
+        {provider && (
+          <div className="insight-panel__provider">
+            <span className="dot" />
+            {provider.openai_configured
+              ? `Intelligence model online · ${provider.openai_model}`
+              : "Local rule-based engine (hosted model not configured)"}
+          </div>
+        )}
       </div>
 
       <form

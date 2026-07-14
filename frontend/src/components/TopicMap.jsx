@@ -32,6 +32,7 @@ export default function TopicMap({
   selectedRegion,
   onDrill,
   onRegionsLoaded,
+  liveValues, // optional { [regionName]: number } overriding scaffolded values
 }) {
   const [geojson, setGeojson] = useState(null);
   const [error, setError] = useState(null);
@@ -39,6 +40,13 @@ export default function TopicMap({
   onRegionsLoadedRef.current = onRegionsLoaded;
 
   const nameKey = level === "national" ? "ADM1_EN" : "ADM2_EN";
+
+  // Prefer a live value for a region when one is available; otherwise fall
+  // back to the deterministic scaffolded value from topics.js.
+  const valueFor = (name) => {
+    const live = liveValues?.[name];
+    return typeof live === "number" ? live : regionValue(topicId, name);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -62,7 +70,7 @@ export default function TopicMap({
         const regions = features
           .map((f) => {
             const name = f.properties?.[nameKey];
-            return { name, value: regionValue(topicId, name) };
+            return { name, value: valueFor(name) };
           })
           .filter((r) => r.name)
           .sort((a, b) => b.value - a.value);
@@ -75,21 +83,22 @@ export default function TopicMap({
     return () => {
       cancelled = true;
     };
-  }, [topicId, level, county, nameKey]);
+    // liveValues included so regions recompute when live data arrives.
+  }, [topicId, level, county, nameKey, liveValues]);
 
   // Colour scale bounds for the currently visible features.
   const [min, max] = useMemo(() => {
     if (!geojson) return [0, 1];
     const values = geojson.features
-      .map((f) => regionValue(topicId, f.properties?.[nameKey]))
+      .map((f) => valueFor(f.properties?.[nameKey]))
       .filter((v) => typeof v === "number");
     if (!values.length) return [0, 1];
     return [Math.min(...values), Math.max(...values)];
-  }, [geojson, topicId, nameKey]);
+  }, [geojson, topicId, nameKey, liveValues]);
 
   const styleFeature = (feature) => {
     const name = feature.properties?.[nameKey];
-    const value = regionValue(topicId, name);
+    const value = valueFor(name);
     const isSelected = selectedRegion && name === selectedRegion;
     return {
       fillColor: rampColor(topicId, value, min, max),
@@ -102,7 +111,7 @@ export default function TopicMap({
 
   const onEachFeature = (feature, layer) => {
     const name = feature.properties?.[nameKey];
-    const value = regionValue(topicId, name);
+    const value = valueFor(name);
     layer.bindTooltip(
       `<strong>${name}</strong><br/>${formatValue(topicId, value)}`,
       { sticky: true },

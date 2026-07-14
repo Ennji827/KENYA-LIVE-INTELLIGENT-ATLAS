@@ -8,6 +8,7 @@ import AuthGateway, { readAuthSession, clearAuthSession } from "./components/Aut
 // Shared tokens + glassmorphism + auth/KSA styles, then the app UI.
 import "./styles/theme.css";
 import "./styles/intel.css";
+import "./styles/payments.css";
 
 // Top-level shell for the critical intelligence system.
 // Flow: Landing (home) -> Auth -> Hub (pick a topic) -> Area of interest -> Workspace.
@@ -120,6 +121,7 @@ export default function AppIntel() {
         initialScope={area}
         onBackToHub={backToHub}
         onChangeArea={() => setArea(null)}
+        user={session}
       />
     );
   }

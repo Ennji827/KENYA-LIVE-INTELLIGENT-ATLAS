@@ -16,7 +16,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .models import AEISUser, Alert, DataAsset, FieldReport, ProcessingJob
-from .services import auth, data_sources, domain, intelligence, jobs, reports
+from .services import auth, data_sources, domain, intelligence, jobs, osm_metrics, payments, reports
 
 
 FRONTEND_DIST_DIR = settings.PROJECT_ROOT / "frontend" / "dist"
@@ -72,6 +72,61 @@ def report_error(exc: reports.ReportError) -> JsonResponse:
 
 def job_error(exc: jobs.JobError) -> JsonResponse:
     return api_json({"error": str(exc)}, status=exc.status)
+
+
+def payment_error(exc: payments.PaymentError) -> JsonResponse:
+    return api_json({"error": str(exc)}, status=exc.status)
+
+
+# ── M-PESA payment gateway (report generation) ──────────────────────────
+
+@require_http_methods(["GET", "OPTIONS"])
+def payments_config(request: HttpRequest) -> JsonResponse:
+    if request.method == "OPTIONS":
+        return api_json({"status": "ok"})
+    config = payments.gateway_config()
+    # Hand the client a fresh account reference to show against the Paybill.
+    config["account_ref"] = payments.account_reference(request.GET.get("ref", ""))
+    return api_json(config)
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def payments_stk_push(request: HttpRequest) -> JsonResponse:
+    if request.method == "OPTIONS":
+        return api_json({"status": "ok"})
+    payload = request_json(request)
+    phone = str(payload.get("phone") or "").strip()
+    if not phone:
+        return api_json({"error": "A phone number is required."}, status=400)
+    account_ref = str(payload.get("account_ref") or "").strip() or payments.account_reference()
+    description = str(payload.get("description") or "AEIS-K intelligence report").strip()
+    try:
+        result = payments.initiate_stk(phone=phone, account_ref=account_ref, description=description)
+    except payments.PaymentError as exc:
+        return payment_error(exc)
+    result["account_ref"] = account_ref
+    return api_json(result, status=201)
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def payments_status(request: HttpRequest) -> JsonResponse:
+    if request.method == "OPTIONS":
+        return api_json({"status": "ok"})
+    checkout_id = str(request.GET.get("checkout_id") or "").strip()
+    try:
+        return api_json(payments.query_status(checkout_id))
+    except payments.PaymentError as exc:
+        return payment_error(exc)
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def payments_mpesa_callback(request: HttpRequest) -> JsonResponse:
+    if request.method == "OPTIONS":
+        return api_json({"status": "ok"})
+    payload = request_json(request)
+    return api_json(payments.handle_callback(payload))
 
 
 def protected_session(request: HttpRequest, permission: str | None = None):
@@ -1102,6 +1157,14 @@ def automation_status(request: HttpRequest) -> JsonResponse:
 @require_http_methods(["GET", "OPTIONS"])
 def analysis_country(request: HttpRequest) -> JsonResponse:
     return api_json(domain.country_analysis())
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def osm_metric(request: HttpRequest, topic: str) -> JsonResponse:
+    # Live per-county topic values from OpenStreetMap (roads/forests/water).
+    # No county -> national aggregate over all counties; ?county=<name> -> one.
+    status, result = osm_metrics.metric_payload(topic, request.GET.get("county") or None)
+    return api_json(result, status=status)
 
 
 @require_http_methods(["GET", "OPTIONS"])
