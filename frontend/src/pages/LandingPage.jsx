@@ -1,19 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import KsaPoweredBy from "../components/KsaPoweredBy";
+import SiteHeader from "../components/SiteHeader";
+import TopicCard from "../components/TopicCard";
 import { TOPICS } from "../data/topics";
+import { TOPIC_IMAGE } from "../data/topicImages";
 import "../styles/landing.css";
-
-// Uploaded slide photos, served from /public/data, keyed by topic id.
-const TOPIC_IMAGE = {
-  rainfall: "/data/rain.jpg",
-  weather: "/data/weather.jpg",
-  farmland: "/data/farm.jpg",
-  forests: "/data/forest.jpg",
-  water_bodies: "/data/water.jpg",
-  roads: "/data/roads.jpg",
-  electricity: "/data/electricity.jpg",
-  households: "/data/household.jpg",
-};
 
 // One hero slide per topic that has a photo, in topic order. Each falls back to
 // the topic's own colour gradient if the image is missing.
@@ -39,11 +30,20 @@ const ArrowRight = (props) => (
   </svg>
 );
 
-export default function LandingPage({ onSignIn, onSignUp, onExploreTopic }) {
+export default function LandingPage({
+  onSignIn,
+  onSignUp,
+  onExploreTopic,
+  authenticated = false,
+  user = null,
+  onEnterHub,
+  onSignOut,
+}) {
   const [active, setActive] = useState(0);
   const timer = useRef(null);
 
   const explore = onExploreTopic || onSignUp || (() => {});
+  const scrollTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
   const go = useCallback((next) => {
     setActive((prev) => (next + SLIDES.length) % SLIDES.length);
@@ -64,23 +64,16 @@ export default function LandingPage({ onSignIn, onSignUp, onExploreTopic }) {
   return (
     <div className="lp-root">
 
-      {/* ── Nav ── */}
-      <nav className="lp-nav">
-        <div className="lp-nav-inner">
-          <div className="lp-logo">
-            <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-              <rect width="32" height="32" fill="#0f4c81" />
-              <path d="M8 22 L16 10 L24 22" stroke="#4ade80" strokeWidth="2.5" strokeLinejoin="round" fill="none" />
-              <circle cx="16" cy="10" r="2" fill="#4ade80" />
-            </svg>
-            <span className="lp-logo-name">AEIS-K</span>
-          </div>
-          <div className="lp-nav-actions">
-            <button type="button" className="lp-btn-ghost" onClick={onSignIn}>Sign In</button>
-            <button type="button" className="lp-btn-primary" onClick={onSignUp}>Sign Up</button>
-          </div>
-        </div>
-      </nav>
+      {/* ── Nav (shared branded header) ── */}
+      <SiteHeader
+        user={authenticated ? user : null}
+        onHome={scrollTop}
+        onEnterHub={authenticated ? onEnterHub : undefined}
+        onSignIn={authenticated ? undefined : onSignIn}
+        onSignUp={authenticated ? undefined : onSignUp}
+        onSignOut={authenticated ? onSignOut : undefined}
+        active="home"
+      />
 
       {/* ── Hero copy ── */}
       <section className="lp-hero">
@@ -163,30 +156,13 @@ export default function LandingPage({ onSignIn, onSignUp, onExploreTopic }) {
             Pick one to drill in, generate reports, and ask the model for insights.
           </p>
           <div className="lp-topics-grid">
-            {TOPICS.map((topic) => {
-              const accent = topic.ramp?.[1] || "#0f766e";
-              const image = TOPIC_IMAGE[topic.id];
-              return (
-                <button
-                  key={topic.id}
-                  type="button"
-                  className="lp-topic-card"
-                  style={{
-                    "--topic-accent": accent,
-                    backgroundImage: image
-                      ? `linear-gradient(180deg, rgba(2,6,23,0.20) 0%, rgba(2,6,23,0.85) 100%), url('${image}')`
-                      : undefined,
-                  }}
-                  onClick={() => explore(topic.id)}
-                >
-                  <span className="lp-topic-card-cat">{topic.category}</span>
-                  <h3 className="lp-topic-card-title">{topic.label}</h3>
-                  <span className="lp-topic-card-cta">
-                    Explore <ArrowRight />
-                  </span>
-                </button>
-              );
-            })}
+            {TOPICS.map((topic) => (
+              <TopicCard
+                key={topic.id}
+                topic={topic}
+                onClick={() => explore(topic.id)}
+              />
+            ))}
           </div>
         </div>
       </section>
@@ -196,11 +172,21 @@ export default function LandingPage({ onSignIn, onSignUp, onExploreTopic }) {
         <div className="lp-section-inner lp-cta-band-inner">
           <div>
             <h2 className="lp-cta-band-title">Ready to explore Kenya's national data?</h2>
-            <p className="lp-cta-band-sub">Join researchers, analysts, and decision makers using AEIS-K.</p>
+            <p className="lp-cta-band-sub">
+              {authenticated
+                ? "Jump into the intelligence hub and drill down from national to sub-county level."
+                : "Join researchers, analysts, and decision makers using AEIS-K."}
+            </p>
           </div>
           <div className="lp-cta-band-actions">
-            <button type="button" className="lp-cta-primary" onClick={onSignUp}>Create free account</button>
-            <button type="button" className="lp-cta-ghost lp-cta-ghost-light" onClick={onSignIn}>Sign in</button>
+            {authenticated ? (
+              <button type="button" className="lp-cta-primary" onClick={onEnterHub}>Enter the hub</button>
+            ) : (
+              <>
+                <button type="button" className="lp-cta-primary" onClick={onSignUp}>Create free account</button>
+                <button type="button" className="lp-cta-ghost lp-cta-ghost-light" onClick={onSignIn}>Sign in</button>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -234,8 +220,17 @@ export default function LandingPage({ onSignIn, onSignUp, onExploreTopic }) {
 
           <nav className="lp-footer-col" aria-label="Platform">
             <h4>Platform</h4>
-            <button type="button" className="lp-footer-link" onClick={onSignIn}>Sign in</button>
-            <button type="button" className="lp-footer-link" onClick={onSignUp}>Create account</button>
+            {authenticated ? (
+              <>
+                <button type="button" className="lp-footer-link" onClick={onEnterHub}>Open the hub</button>
+                <button type="button" className="lp-footer-link" onClick={onSignOut}>Sign out</button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="lp-footer-link" onClick={onSignIn}>Sign in</button>
+                <button type="button" className="lp-footer-link" onClick={onSignUp}>Create account</button>
+              </>
+            )}
             <a className="lp-footer-link" href="mailto:info@ksa.go.ke">Contact</a>
           </nav>
 

@@ -4,6 +4,8 @@ frontend/dist/
 venv/
 .venv/
 .env
+.env.local
+*.env
 __pycache__/
 *.pyc
 .DS_Store

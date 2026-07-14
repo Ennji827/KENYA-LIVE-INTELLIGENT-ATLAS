@@ -1,17 +1,14 @@
 import React, { useMemo, useState } from "react";
-import { TOPICS, nationalValue, formatValue, SOURCE_STATUS_LABEL } from "../data/topics";
+import { TOPICS, SOURCE_STATUS_LABEL } from "../data/topics";
+import TopicCard from "../components/TopicCard";
 
 // Distinct topic categories, in display order, used as landing-page tabs.
 const CATEGORIES = ["All", ...Array.from(new Set(TOPICS.map((t) => t.category)))];
 
 // The single hub page: category tabs + all eight topics as clickable cards.
-export default function IntelHub({ onOpenTopic, user, onSignOut }) {
+// The brand, user, and sign-out live in the shared SiteHeader above it.
+export default function IntelHub({ onOpenTopic }) {
   const [tab, setTab] = useState("All");
-
-  const displayName =
-    user && (user.first_name || user.name || user.email)
-      ? user.first_name || user.name || user.email
-      : null;
 
   const visible = useMemo(
     () => (tab === "All" ? TOPICS : TOPICS.filter((t) => t.category === tab)),
@@ -21,29 +18,7 @@ export default function IntelHub({ onOpenTopic, user, onSignOut }) {
   return (
     <div className="hub">
       <header className="hub__hero">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <div className="hub__eyebrow">AEIS-K · Critical Intelligence System</div>
-          {onSignOut && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {displayName && (
-                <span className="hub__eyebrow" style={{ opacity: 0.85 }}>
-                  Signed in as {displayName}
-                </span>
-              )}
-              <button type="button" className="btn btn--ghost" onClick={onSignOut}>
-                Sign out
-              </button>
-            </div>
-          )}
-        </div>
+        <div className="hub__eyebrow">AEIS-K · Critical Intelligence System</div>
         <h1>National Intelligence Hub</h1>
         <p>
           Live geospatial intelligence for decision makers and researchers.
@@ -79,29 +54,13 @@ export default function IntelHub({ onOpenTopic, user, onSignOut }) {
       </nav>
 
       <section className="hub__grid">
-        {visible.map((topic) => {
-          const national = nationalValue(topic.id);
-          return (
-            <button
-              key={topic.id}
-              type="button"
-              className="topic-card"
-              onClick={() => onOpenTopic(topic.id)}
-              style={{ "--accent": topic.ramp[1] }}
-            >
-              <span className="topic-card__icon" aria-hidden>
-                {topic.icon}
-              </span>
-              <span className="topic-card__category">{topic.category}</span>
-              <span className="topic-card__label">{topic.label}</span>
-              <span className="topic-card__value">
-                {formatValue(topic.id, national)}
-              </span>
-              <span className="topic-card__desc">{topic.description}</span>
-              <span className="topic-card__cta">Explore →</span>
-            </button>
-          );
-        })}
+        {visible.map((topic) => (
+          <TopicCard
+            key={topic.id}
+            topic={topic}
+            onClick={() => onOpenTopic(topic.id)}
+          />
+        ))}
       </section>
     </div>
   );

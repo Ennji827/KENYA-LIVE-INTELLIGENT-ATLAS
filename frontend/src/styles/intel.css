@@ -15,7 +15,8 @@
 
 body {
   margin: 0;
-  background: var(--aurora, transparent), var(--bg);
+  /* Shared aurora + veiled photo backdrop so every screen refracts one image. */
+  background: var(--app-bg);
   background-attachment: fixed;
   color: var(--ink);
   font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -881,3 +882,125 @@ body {
     margin-left: 0;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Glassmorphic integration layer
+   Carries the landing page's frosted-glass language across the
+   signed-in app (hub · area select · workspace). Sharp corners are
+   kept per the design directive — depth comes from blur, layered
+   translucency, hairline highlights and soft shadows. Loaded last so
+   these enhancements win over the base rules above.
+   ────────────────────────────────────────────────────────────── */
+
+/* Align the app accent/brand with the shared theme tokens. */
+:root {
+  --brand: var(--aeis-brand);
+}
+
+/* Hero sits directly under the shared header. */
+.hub { padding-top: 32px; }
+.hub__hero h1 { font-size: clamp(30px, 4.4vw, 44px); letter-spacing: -0.03em; }
+
+/* Eyebrow → frosted badge */
+.hub__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-hi);
+  padding: 7px 13px;
+}
+
+/* Category tabs → frosted pills (drop the underline rail) */
+.hub__tabs { border-bottom: none; padding-bottom: 0; gap: 8px; }
+.hub__tab {
+  border: 1px solid transparent;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
+  padding: 9px 14px;
+}
+.hub__tab:hover { background: var(--glass-bg-strong); color: var(--ink); }
+.hub__tab.is-active {
+  color: var(--brand);
+  border-color: var(--glass-border);
+  border-bottom-color: var(--glass-border);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-shadow), var(--glass-hi);
+}
+.hub__tab-count { background: rgba(148, 163, 184, 0.22); }
+.hub__tab.is-active .hub__tab-count { background: rgba(29, 78, 216, 0.16); color: var(--brand); }
+
+/* Give the core glass surfaces a hairline top highlight for depth. */
+.topic-card,
+.workspace__summary,
+.panel,
+.area-select__head,
+.area-option {
+  box-shadow: var(--glass-shadow), var(--glass-hi);
+}
+
+/* Topic cards: accent glow + lift on hover. */
+.topic-card:hover {
+  border-color: var(--accent);
+  box-shadow:
+    0 18px 42px rgba(15, 23, 42, 0.18),
+    0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
+    var(--glass-hi);
+}
+.topic-card__cta { color: var(--brand); }
+
+/* Buttons: primary gets the brand gradient + glow; ghost becomes glass. */
+.btn {
+  border: none;
+  background: linear-gradient(180deg, #1d4ed8 0%, #0f4c81 100%);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(15, 76, 129, 0.26);
+  transition: filter 0.13s, transform 0.1s, box-shadow 0.13s;
+}
+.btn:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(15, 76, 129, 0.32);
+}
+.btn--ghost {
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid var(--glass-border);
+  color: var(--ink);
+  box-shadow: var(--glass-shadow), var(--glass-hi);
+}
+.btn--ghost:hover { filter: none; background: #fff; }
+
+/* Workspace top bar → its own glass slab. */
+.workspace__bar {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-hi);
+  padding: 12px 16px;
+}
+
+/* Inputs, chips and the insight send button pick up the glass language. */
+.chip {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  backdrop-filter: blur(8px) saturate(140%);
+  border: 1px solid var(--glass-border);
+}
+.insight-panel__form textarea,
+.area-pickers select {
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+}
+.insight-panel__form button {
+  background: linear-gradient(180deg, #1d4ed8 0%, #0f4c81 100%);
+  box-shadow: 0 8px 20px rgba(15, 76, 129, 0.26);
+}
+
+.topic-map { border-color: var(--glass-border); }

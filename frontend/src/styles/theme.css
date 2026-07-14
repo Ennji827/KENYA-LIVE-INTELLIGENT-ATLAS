@@ -22,12 +22,21 @@
   --glass-border: rgba(255, 255, 255, 0.7);
   --glass-blur: 18px;
   --glass-shadow: 0 10px 30px rgba(15, 23, 42, 0.10), 0 2px 6px rgba(15, 23, 42, 0.05);
+  /* Hairline top highlight that sells the frosted-glass edge on sharp corners */
+  --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 
   /* Aurora backdrop (gives glass something to refract) */
   --aurora:
     radial-gradient(1100px 620px at 8% -8%, rgba(59, 130, 246, 0.16), transparent 60%),
     radial-gradient(980px 520px at 100% 0%, rgba(16, 185, 129, 0.14), transparent 55%),
     radial-gradient(900px 700px at 50% 118%, rgba(124, 58, 237, 0.12), transparent 55%);
+
+  /* Shared page backdrop: aurora glow + a light veil over the uploaded photo,
+     so every screen sits on one fixed image the glass can refract. */
+  --app-bg:
+    var(--aurora),
+    linear-gradient(180deg, rgba(246, 249, 255, 0.80) 0%, rgba(238, 242, 249, 0.90) 100%),
+    url("/data/background.jpg") center center / cover no-repeat;
 }
 
 :root[data-theme="dark"] {
@@ -42,10 +51,15 @@
   --glass-bg-strong: rgba(17, 28, 47, 0.78);
   --glass-border: rgba(148, 163, 184, 0.24);
   --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.25);
+  --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   --aurora:
     radial-gradient(1100px 620px at 8% -8%, rgba(59, 130, 246, 0.22), transparent 60%),
     radial-gradient(980px 520px at 100% 0%, rgba(16, 185, 129, 0.16), transparent 55%),
     radial-gradient(900px 700px at 50% 118%, rgba(124, 58, 237, 0.20), transparent 55%);
+  --app-bg:
+    var(--aurora),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.82) 0%, rgba(15, 23, 42, 0.90) 100%),
+    url("/data/background.jpg") center center / cover no-repeat;
   color-scheme: dark;
 }
 
@@ -67,6 +81,105 @@
   backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
+}
+
+/* ── Shared branded header ───────────────────────────────────────
+   The gradient-glass top bar used on the landing (home) page and
+   across the signed-in app. Sticky, translucent, blurs content that
+   scrolls beneath it. Sits above the map (z-index) but below modals. */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 900;
+  background:
+    radial-gradient(620px 320px at 100% 0%, rgba(16, 185, 129, 0.32), transparent 60%),
+    linear-gradient(135deg, rgba(15, 76, 129, 0.90) 0%, rgba(15, 118, 110, 0.90) 100%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.20), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.site-header__inner {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.site-header__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.site-header__name {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+}
+
+.site-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.site-header__link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 8px 12px;
+  transition: color 0.13s, background 0.13s;
+}
+.site-header__link:hover { color: #fff; background: rgba(255, 255, 255, 0.14); }
+.site-header__link.is-active { color: #fff; background: rgba(255, 255, 255, 0.18); }
+
+.site-header__user {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-weight: 700;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-header__btn {
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 14px;
+  padding: 9px 16px;
+  transition: background 0.13s, transform 0.12s, box-shadow 0.13s;
+}
+.site-header__btn.ghost {
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+.site-header__btn.ghost:hover { background: rgba(255, 255, 255, 0.28); transform: translateY(-1px); }
+.site-header__btn.solid {
+  border: none;
+  background: #ffffff;
+  color: var(--aeis-brand-deep);
+  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.24);
+}
+.site-header__btn.solid:hover { background: #f1f5f9; transform: translateY(-1px); }
+
+@media (max-width: 560px) {
+  .site-header__user { display: none; }
+  .site-header__inner { padding: 10px 16px; }
 }
 
 /* ── Auth gateway ───────────────────────────────────────────── */
