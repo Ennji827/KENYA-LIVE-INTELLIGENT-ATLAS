@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from datetime import date, timedelta
 from urllib.error import HTTPError, URLError
@@ -27,6 +28,21 @@ INTELLIGENCE_SCHEMA = {
     "additionalProperties": False,
     "properties": {
         "executive_summary": {"type": "string"},
+        # `insights` is the reason-paired output the workspace UI renders: each
+        # item is a finding plus the analytical reason it was drawn. Every other
+        # field is the structured brief persisted for reports.
+        "insights": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "text": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["text", "reason"],
+            },
+        },
         "key_observations": {"type": "array", "items": {"type": "string"}},
         "risk_areas": {"type": "array", "items": {"type": "string"}},
         "affected_areas": {"type": "array", "items": {"type": "string"}},
@@ -49,6 +65,7 @@ INTELLIGENCE_SCHEMA = {
     },
     "required": [
         "executive_summary",
+        "insights",
         "key_observations",
         "risk_areas",
         "affected_areas",
@@ -59,6 +76,52 @@ INTELLIGENCE_SCHEMA = {
         "missing_data",
     ],
 }
+
+
+# ── Rules that govern insight generation ─────────────────────────────
+#
+# These rules define the persona and hard constraints applied to every
+# model-generated insight. They are written for a professional GIS /
+# geospatial-intelligence standard: quantified, scale-aware, evidence-bound,
+# and explicit about the difference between a verified measurement and the
+# scaffolded placeholder values the system currently serves for most topics.
+#
+# The same rules are echoed (in condensed form) inside the local fallback's
+# `explainability`, so the governance is consistent across both providers.
+GIS_ANALYST_RULES = """\
+You are the AEIS-K Geospatial Intelligence Analyst — a senior GIS expert briefing \
+Kenyan national and county decision-makers. Generate insights under these rules:
+
+1. EVIDENCE ONLY. Use only the supplied JSON: the `workspace` layer (the topic and \
+per-region values the user is currently viewing) plus any connected data sources. \
+Never invent values, trends, coordinates, rankings, causes, or sources.
+
+2. VERIFIED vs SCAFFOLDED. Treat every value whose source_status is not "connected" as \
+scaffolded placeholder data, not a measurement. You may describe its distribution, but \
+must never present it as a confirmed real-world figure, and must recommend connecting a \
+verified source. State clearly which topics are backed by a live feed and which are not.
+
+3. STATE THE SCALE. Name the analytical tier (national → county → sub-county) for every \
+finding. Do not attribute a parent-level pattern to individuals within it, and do not \
+extrapolate a finding to a finer or coarser scale than the data supports.
+
+4. SPATIAL REASONING. Prefer geospatial framing: distribution and spread, clusters and \
+hotspots, outliers, and spatial inequality (e.g. the max-to-min ratio across regions). \
+Rank the named regions and cite the actual numbers with their unit.
+
+5. OBSERVATION ≠ INFERENCE. Separate what the data shows from what it might imply. Never \
+assign a cause (drought, damage, failure, under-investment) unless a connected source \
+supports it; otherwise say the driver cannot be confirmed from the available layers.
+
+6. EVERY INSIGHT HAS A REASON. Each item in `insights` pairs a finding (`text`) with the \
+analytical reason it was drawn (`reason`) — how it was computed or why it matters.
+
+7. CALIBRATE CONFIDENCE. Report confidence honestly and list the missing datasets that \
+would raise it. Prefer "low" when the analysis rests only on scaffolded values.
+
+8. AUDIENCE. Use plain, neutral, professional language suitable for a Ministry brief. \
+No PII, no alarmism, no speculation dressed as fact.
+"""
 
 
 class IntelligenceError(Exception):
@@ -118,7 +181,85 @@ def _three_day_rain(forecast: dict) -> float:
     )
 
 
-def _data_context(scope: dict) -> tuple[dict, list[dict], list[str]]:
+# Topics for which Earth-observation feeds (weather, Landsat, raster indices)
+# are analytically relevant. For non-EO topics (roads, electricity, households)
+# those feeds are noise, so we skip them and avoid listing them as "missing".
+_EO_TOPICS = {
+    "rainfall",
+    "weather",
+    "farmland",
+    "farm_land",
+    "planted_forest",
+    "natural_forest",
+    "water_bodies",
+    "vegetation",
+}
+
+
+def _child_tier(level: str) -> str:
+    if level == "national":
+        return "counties"
+    if level == "county":
+        return "sub-counties"
+    return "areas"
+
+
+def _workspace_stats(workspace: dict) -> dict | None:
+    """Summarise the per-region values the user is currently viewing.
+
+    The frontend sends `regions: [{name, value}]` for the active topic + scope.
+    We compute the distribution server-side so both providers reason over the
+    exact figures on screen rather than re-deriving anything.
+    """
+
+    regions = [
+        {"name": str(r.get("name") or "").strip(), "value": float(r["value"])}
+        for r in (workspace.get("regions") or [])
+        if isinstance(r, dict) and isinstance(r.get("value"), (int, float))
+    ]
+    if not regions:
+        return None
+    ordered = sorted(regions, key=lambda r: r["value"], reverse=True)
+    values = [r["value"] for r in ordered]
+    mean = sum(values) / len(values)
+    top, bottom = ordered[0], ordered[-1]
+    spread = round(top["value"] / bottom["value"], 1) if bottom["value"] else None
+    return {
+        "count": len(ordered),
+        "mean": round(mean, 3),
+        "max": top,
+        "min": bottom,
+        "top": ordered[:3],
+        "bottom": ordered[-3:][::-1],
+        "spread_ratio": spread,
+        "regions": ordered[:60],
+    }
+
+
+def _workspace_context(workspace: dict) -> tuple[dict, dict | None, str]:
+    """Build the workspace evidence block, its stats, and its source status."""
+
+    topic_id = str(workspace.get("topic_id") or "").strip().lower()
+    source_status = str(workspace.get("source_status") or "").strip().lower()
+    if source_status not in {"connected", "scaffolded"}:
+        # Live feeds exist today only for the OSM-backed topics; everything else
+        # is scaffolded placeholder data until a verified source is wired.
+        source_status = "connected" if topic_id in {"roads", "forests", "water_bodies"} and workspace.get("live") else "scaffolded"
+    stats = _workspace_stats(workspace)
+    block = {
+        "topic": workspace.get("topic") or topic_id,
+        "topic_id": topic_id,
+        "unit": workspace.get("unit") or "",
+        "metric": workspace.get("metric") or workspace.get("topic") or topic_id,
+        "scope_label": workspace.get("scope") or "",
+        "level": str(workspace.get("level") or "national").lower(),
+        "source_status": source_status,
+        "statistics": stats,
+    }
+    return block, stats, source_status
+
+
+def _data_context(scope: dict, workspace: dict | None = None) -> tuple[dict, list[dict], list[str]]:
     sources: list[dict] = []
     missing: list[str] = []
     context: dict = {
@@ -127,48 +268,72 @@ def _data_context(scope: dict) -> tuple[dict, list[dict], list[str]]:
         "dashboard": domain.dashboard_summary_payload()["summary"],
     }
 
-    weather_identifier = (
-        scope["name"]
-        if scope["level"] == "county"
-        else scope.get("county")
-        if scope["level"] in {"subcounty", "ward"}
-        else None
-    )
-    weather_status, weather = domain.weather_forecast_payload(weather_identifier)
-    if weather_status == 200:
-        context["weather"] = weather
-        sources.append(
-            {
-                "name": "Open-Meteo forecast API",
-                "category": "weather",
-                "freshness": weather.get("generated_at"),
-                "status": weather.get("provider_status", "live"),
-            }
-        )
-    else:
-        missing.append("Live weather forecast")
+    workspace = workspace or {}
+    topic_id = str(workspace.get("topic_id") or "").strip().lower()
+    # With no workspace (e.g. report generation) keep the full EO context for
+    # backward compatibility; with a workspace, only pull EO feeds for EO topics.
+    eo_relevant = (not workspace) or (topic_id in _EO_TOPICS)
 
-    landsat_county = scope["name"] if scope["level"] == "county" else scope.get("county")
-    if landsat_county:
-        try:
-            landsat = data_sources.landsat_latest(
-                {"county": landsat_county, "max_cloud": "35", "lookback_days": "365"}
+    if workspace:
+        block, stats, source_status = _workspace_context(workspace)
+        context["workspace"] = block
+        if stats:
+            sources.append(
+                {
+                    "name": f"AEIS-K {block['metric']} distribution layer",
+                    "category": "workspace_layer",
+                    "freshness": context["generated_at"],
+                    "status": source_status,
+                }
             )
-            context["landsat"] = landsat
-            if landsat.get("scene"):
-                sources.append(
-                    {
-                        "name": "USGS Landsat Collection 2",
-                        "category": "satellite",
-                        "freshness": landsat["scene"].get("date"),
-                        "status": landsat.get("status"),
-                    }
+        if source_status != "connected":
+            missing.append(
+                f"Verified source for {block['metric']} — the {block['topic']} values shown are scaffolded placeholders."
+            )
+
+    if eo_relevant:
+        weather_identifier = (
+            scope["name"]
+            if scope["level"] == "county"
+            else scope.get("county")
+            if scope["level"] in {"subcounty", "ward"}
+            else None
+        )
+        weather_status, weather = domain.weather_forecast_payload(weather_identifier)
+        if weather_status == 200:
+            context["weather"] = weather
+            sources.append(
+                {
+                    "name": "Open-Meteo forecast API",
+                    "category": "weather",
+                    "freshness": weather.get("generated_at"),
+                    "status": weather.get("provider_status", "live"),
+                }
+            )
+        else:
+            missing.append("Live weather forecast")
+
+        landsat_county = scope["name"] if scope["level"] == "county" else scope.get("county")
+        if landsat_county:
+            try:
+                landsat = data_sources.landsat_latest(
+                    {"county": landsat_county, "max_cloud": "35", "lookback_days": "365"}
                 )
-        except data_sources.DataSourceError as exc:
-            context["landsat_error"] = str(exc)
-            missing.append("Current Landsat catalogue result")
-    else:
-        missing.append("National seamless Landsat analytical composite")
+                context["landsat"] = landsat
+                if landsat.get("scene"):
+                    sources.append(
+                        {
+                            "name": "USGS Landsat Collection 2",
+                            "category": "satellite",
+                            "freshness": landsat["scene"].get("date"),
+                            "status": landsat.get("status"),
+                        }
+                    )
+            except data_sources.DataSourceError as exc:
+                context["landsat_error"] = str(exc)
+                missing.append("Current Landsat catalogue result")
+        else:
+            missing.append("National seamless Landsat analytical composite")
 
     assets = DataAsset.objects.all()
     if scope["level"] != "national":
@@ -234,27 +399,89 @@ def _data_context(scope: dict) -> tuple[dict, list[dict], list[str]]:
     else:
         missing.append(f"Verified field observations for {scope['name']}")
 
-    gee = domain.gee_layers_payload()
-    context["raster_indices"] = gee
-    if gee.get("configured_layers"):
-        sources.append(
-            {
-                "name": "Configured Earth observation raster layers",
-                "category": "indices",
-                "freshness": domain.now_iso(),
-                "status": "configured",
-            }
-        )
-    else:
-        missing.extend(
-            [
-                "Provider-backed NDVI values",
-                "Provider-backed NDWI values",
-                "Provider-backed NDBI or land-cover classification",
-            ]
-        )
+    if eo_relevant:
+        gee = domain.gee_layers_payload()
+        context["raster_indices"] = gee
+        if gee.get("configured_layers"):
+            sources.append(
+                {
+                    "name": "Configured Earth observation raster layers",
+                    "category": "indices",
+                    "freshness": domain.now_iso(),
+                    "status": "configured",
+                }
+            )
+        else:
+            missing.extend(
+                [
+                    "Provider-backed NDVI values",
+                    "Provider-backed NDWI values",
+                    "Provider-backed NDBI or land-cover classification",
+                ]
+            )
 
     return context, sources, list(dict.fromkeys(missing))
+
+
+def _workspace_local_insights(block: dict, question: str) -> list[dict]:
+    """Reason-paired insights derived from the on-screen distribution.
+
+    Mirrors the rules in GIS_ANALYST_RULES for the deterministic fallback:
+    quantified, ranked, scale-named, and explicit about scaffolded values.
+    """
+
+    stats = block.get("statistics") or {}
+    if not stats:
+        return []
+    metric = (block.get("metric") or block.get("topic") or "this indicator").strip()
+    metric_lower = metric.lower()
+    unit = block.get("unit") or ""
+    level = block.get("level") or "national"
+    tier = _child_tier(level)
+    scaffolded = block.get("source_status") != "connected"
+    caveat = " (scaffolded placeholder values, not a verified measurement)" if scaffolded else ""
+
+    def fmt(value: float) -> str:
+        text = f"{value:,.0f}" if abs(value) >= 100 else f"{value:g}"
+        return f"{text} {unit}".strip()
+
+    top, bottom = stats["max"], stats["min"]
+    insights = [
+        {
+            "text": f"Across {stats['count']} {tier}, {metric_lower} averages {fmt(stats['mean'])}{caveat}.",
+            "reason": f"Mean of the {stats['count']} {tier} currently in view at the {level} tier.",
+        },
+        {
+            "text": (
+                f"{top['name']} shows the highest {metric_lower} ({fmt(top['value'])}); "
+                f"{bottom['name']} the lowest ({fmt(bottom['value'])})."
+            ),
+            "reason": "Ranking the in-view regions by value isolates the extremes of the distribution.",
+        },
+    ]
+    if stats.get("spread_ratio"):
+        insights.append(
+            {
+                "text": f"The distribution is uneven — {top['name']} is about {stats['spread_ratio']}× {bottom['name']}.",
+                "reason": "A large max-to-min ratio flags spatial inequality that may warrant targeted attention.",
+            }
+        )
+
+    q = question.lower()
+    if re.search(r"(highest|most|top|leading|best)", q):
+        names = ", ".join(f"{r['name']} ({fmt(r['value'])})" for r in stats["top"])
+        insights.insert(0, {"text": f"Highest {metric_lower}: {names}.", "reason": "Directly answers the question about the top-ranked regions."})
+    elif re.search(r"(lowest|least|bottom|worst|underserved)", q):
+        names = ", ".join(f"{r['name']} ({fmt(r['value'])})" for r in stats["bottom"])
+        insights.insert(0, {"text": f"Lowest {metric_lower}: {names}.", "reason": "Directly answers the question about the lowest-ranked regions."})
+    elif re.search(r"(why|cause|driver|reason)", q):
+        insights.append(
+            {
+                "text": f"A driver for the {metric_lower} pattern cannot be confirmed from the current layers.",
+                "reason": "Causal attribution requires a connected, verified source; only the distribution is available now.",
+            }
+        )
+    return insights
 
 
 def _local_analysis(question: str, scope: dict, context: dict, missing: list[str]) -> dict:
@@ -341,6 +568,30 @@ def _local_analysis(question: str, scope: dict, context: dict, missing: list[str
         )
         affected.extend(item.get("scope_name") for item in active_alerts if item.get("scope_name"))
 
+    # Lead with the workspace layer when the user is analysing a specific topic,
+    # so the summary and observations reflect what is on screen.
+    workspace_block = context.get("workspace") or {}
+    workspace_insights = _workspace_local_insights(workspace_block, question)
+    if workspace_block.get("statistics"):
+        st = workspace_block["statistics"]
+        scope_label = workspace_block.get("scope_label") or scope["name"]
+        observations.insert(
+            0,
+            f"{workspace_block.get('metric')} at {scope_label}: {st['count']} "
+            f"{_child_tier(workspace_block.get('level') or 'national')} in view, "
+            f"led by {st['max']['name']} ({st['max']['value']}).",
+        )
+        evidence.insert(
+            0,
+            {
+                "source": f"AEIS-K {workspace_block.get('metric')} distribution layer",
+                "observation": (
+                    f"Mean {st['mean']} across {st['count']} regions; "
+                    f"range {st['min']['value']}–{st['max']['value']}."
+                ),
+            },
+        )
+
     if not observations:
         observations.append("Administrative boundaries and system metadata are available, but no decision-grade environmental metric was found for this question.")
     if not risks:
@@ -357,8 +608,16 @@ def _local_analysis(question: str, scope: dict, context: dict, missing: list[str
         f"{observations[0]} "
         "The result is intentionally limited to connected, source-dated data."
     )
+    # `insights` is the reason-paired view the workspace panel renders. Prefer
+    # the workspace-grounded set; otherwise pair each observation with an honest
+    # shared reason so reports still get a populated field.
+    insights = workspace_insights or [
+        {"text": obs, "reason": "Drawn from the connected data sources reviewed for this scope."}
+        for obs in observations[:6]
+    ]
     return {
         "executive_summary": summary,
+        "insights": insights[:8],
         "key_observations": observations[:8],
         "risk_areas": list(dict.fromkeys(risks))[:8],
         "affected_areas": list(dict.fromkeys(filter(None, affected)))[:12],
@@ -393,18 +652,15 @@ def _openai_analysis(question: str, scope: dict, context: dict, missing: list[st
     request_payload = {
         "model": model,
         "store": False,
-        "reasoning": {"effort": "low"},
         "max_output_tokens": 1800,
-        "instructions": (
-            "You are the AEIS-K Intelligence Assistant for Kenya. Use only the supplied JSON evidence. "
-            "Never invent measurements, trends, locations, or causes. Clearly separate forecast-based "
-            "watch conditions from confirmed drought, crop stress, flood damage, or crop failure. "
-            "List missing data and use plain professional language suitable for Ministry decisions."
-        ),
+        "instructions": GIS_ANALYST_RULES,
         "input": (
             f"User question: {question}\n"
             f"Scope: {json.dumps(scope, ensure_ascii=False)}\n"
             f"Known missing data: {json.dumps(missing, ensure_ascii=False)}\n"
+            "The `workspace` block below is the primary analytic layer — the topic and per-region "
+            "values the user is viewing right now. Ground your insights in it, honour its "
+            "`source_status`, and use the remaining context only for corroboration.\n"
             f"Evidence context: {json.dumps(context, ensure_ascii=False, default=str)}"
         ),
         "text": {
@@ -416,6 +672,11 @@ def _openai_analysis(question: str, scope: dict, context: dict, missing: list[st
             }
         },
     }
+    # `reasoning.effort` is only accepted by reasoning models (o-series, gpt-5*);
+    # standard chat models (gpt-4o, gpt-4.1, …) reject it. Send it only when the
+    # configured model supports it so either family works out of the box.
+    if re.match(r"^(o\d|gpt-5)", model):
+        request_payload["reasoning"] = {"effort": "low"}
     request = Request(
         "https://api.openai.com/v1/responses",
         data=json.dumps(request_payload).encode("utf-8"),
@@ -462,8 +723,30 @@ def generate_intelligence(user: AEISUser, payload: dict) -> dict:
         raise IntelligenceError("Intelligence request limit reached. Try again in one minute.", 429)
     cache.set(rate_key, current + 1, 60)
 
+    # The workspace panel sends the topic + per-region values the user is
+    # viewing. Use it to (a) resolve scope when the caller didn't pass one
+    # explicitly, and (b) ground the analysis in the on-screen distribution.
+    workspace = payload.get("workspace") if isinstance(payload.get("workspace"), dict) else {}
+    county_scoped = user.role in {
+        AEISUser.Role.COUNTY,
+        AEISUser.Role.FIELD_OFFICER,
+        AEISUser.Role.FARMER,
+    }
+    # County-scoped users are pinned to their own county by _scope_for_user, so
+    # don't inject a workspace scope for them (a sub-county name would otherwise
+    # trip the "restricted to assigned county" guard). The workspace is still
+    # passed to _data_context below, so their on-screen values still ground it.
+    if workspace and not payload.get("scope_level") and not county_scoped:
+        level = str(workspace.get("level") or "national").lower()
+        if level == "county":
+            payload = {**payload, "scope_level": "county", "scope_name": workspace.get("county") or ""}
+        elif level == "subcounty":
+            payload = {**payload, "scope_level": "subcounty", "scope_name": workspace.get("subcounty") or ""}
+        else:
+            payload = {**payload, "scope_level": "national"}
+
     scope = _scope_for_user(user, payload)
-    context, sources, missing = _data_context(scope)
+    context, sources, missing = _data_context(scope, workspace)
     preferred = str(payload.get("provider") or "auto").lower()
     provider = "local_rule_based"
     model = ""

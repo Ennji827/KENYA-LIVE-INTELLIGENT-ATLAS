@@ -16,10 +16,11 @@ export default function SiteHeader({
   user,
   onHome,
   onEnterHub,
+  onReports,
   onSignIn,
   onSignUp,
   onSignOut,
-  active, // "home" | "hub" | undefined — marks / hides the current section
+  active, // "home" | "hub" | "reports" | undefined — marks / hides the current section
 }) {
   const displayName =
     user && (user.first_name || user.full_name || user.name || user.email)
@@ -54,6 +55,15 @@ export default function SiteHeader({
                   onClick={onEnterHub}
                 >
                   Topics
+                </button>
+              )}
+              {onReports && (
+                <button
+                  type="button"
+                  className={`site-header__link${active === "reports" ? " is-active" : ""}`}
+                  onClick={onReports}
+                >
+                  Reports
                 </button>
               )}
               {displayName && (

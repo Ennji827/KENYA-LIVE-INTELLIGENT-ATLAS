@@ -9,19 +9,59 @@ import { loadGeo, countiesUrl, subcountiesUrl } from "../utils/geo";
 const KENYA_CENTER = [0.23, 37.9];
 const KENYA_ZOOM = 6;
 
-// Fit the map to whatever layer is currently rendered.
-function FitBounds({ geojson }) {
+// Selectable satellite/terrain base layers (Google tiles: lyrs s=satellite,
+// y=hybrid imagery+labels, p=terrain+labels). Served across mt0–mt3 subdomains.
+const BASE_LAYERS = {
+  hybrid: {
+    name: "Hybrid",
+    url: "https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+    subdomains: ["mt0", "mt1", "mt2", "mt3"],
+    attribution: "&copy; Google",
+  },
+  satellite: {
+    name: "Satellite",
+    url: "https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+    subdomains: ["mt0", "mt1", "mt2", "mt3"],
+    attribution: "&copy; Google",
+  },
+  terrain: {
+    name: "Terrain",
+    url: "https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}",
+    subdomains: ["mt0", "mt1", "mt2", "mt3"],
+    attribution: "&copy; Google",
+  },
+};
+const BASE_ORDER = ["hybrid", "satellite", "terrain"];
+
+// Fit the map to whatever is currently in focus: a single selected region when
+// one is chosen (so clicking a name zooms into that sub-county), otherwise the
+// whole rendered collection.
+function FitBounds({ geojson, selectedRegion, nameKey }) {
   const map = useMap();
   useEffect(() => {
     if (!geojson) return;
     try {
-      const layer = L.geoJSON(geojson);
+      let target = geojson;
+      if (selectedRegion) {
+        const feature = geojson.features.find(
+          (f) => f.properties?.[nameKey] === selectedRegion,
+        );
+        if (feature) target = feature;
+      }
+      const layer = L.geoJSON(target);
       const bounds = layer.getBounds();
-      if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+      if (bounds.isValid()) {
+        // Cap the zoom when focusing a single region so small sub-counties
+        // don't snap to an extreme street-level zoom.
+        map.fitBounds(bounds, {
+          padding: [20, 20],
+          maxZoom: selectedRegion ? 11 : undefined,
+        });
+      }
     } catch {
       // Keep the default view if bounds cannot be computed.
     }
-  }, [geojson, map]);
+  }, [geojson, selectedRegion, nameKey, map]);
   return null;
 }
 
@@ -35,11 +75,31 @@ export default function TopicMap({
   liveValues, // optional { [regionName]: number } overriding scaffolded values
 }) {
   const [geojson, setGeojson] = useState(null);
+  // The full set of county boundaries, kept as a persistent context outline so
+  // the national extent stays visible even when drilled into a single county.
+  const [outlineGeo, setOutlineGeo] = useState(null);
   const [error, setError] = useState(null);
+  const [baseLayer, setBaseLayer] = useState("hybrid");
+  const base = BASE_LAYERS[baseLayer];
   const onRegionsLoadedRef = useRef(onRegionsLoaded);
   onRegionsLoadedRef.current = onRegionsLoaded;
 
   const nameKey = level === "national" ? "ADM1_EN" : "ADM2_EN";
+
+  // Load the national county outline once; it underlays every drill level.
+  useEffect(() => {
+    let cancelled = false;
+    loadGeo(countiesUrl())
+      .then((data) => {
+        if (!cancelled) setOutlineGeo(data);
+      })
+      .catch(() => {
+        /* Outline is contextual only; ignore load failures. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Prefer a live value for a region when one is available; otherwise fall
   // back to the deterministic scaffolded value from topics.js.
@@ -103,8 +163,8 @@ export default function TopicMap({
     return {
       fillColor: rampColor(topicId, value, min, max),
       weight: isSelected ? 3 : 1,
-      color: isSelected ? "#0f172a" : "#94a3b8",
-      fillOpacity: 0.75,
+      color: isSelected ? "#0f172a" : "#e2e8f0",
+      fillOpacity: 0.6,
       dashArray: isSelected ? "" : "0",
     };
   };
@@ -125,17 +185,49 @@ export default function TopicMap({
 
   return (
     <div className="topic-map">
+      <div className="topic-map__layers" role="group" aria-label="Base map style">
+        {BASE_ORDER.map((key) => (
+          <button
+            key={key}
+            type="button"
+            className={`topic-map__layer-btn${baseLayer === key ? " is-active" : ""}`}
+            onClick={() => setBaseLayer(key)}
+            aria-pressed={baseLayer === key}
+          >
+            {BASE_LAYERS[key].name}
+          </button>
+        ))}
+      </div>
       <MapContainer
         center={KENYA_CENTER}
         zoom={KENYA_ZOOM}
         scrollWheelZoom
-        style={{ height: "100%", width: "100%", background: "#dbeafe" }}
+        style={{ height: "100%", width: "100%", background: "#0b1b2b" }}
       >
         <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; OpenStreetMap contributors'
-          opacity={0.35}
+          key={baseLayer}
+          url={base.url}
+          subdomains={base.subdomains}
+          attribution={base.attribution}
+          maxZoom={20}
         />
+        {/* Persistent national county outline: rendered first (underneath) and
+            non-interactive, so drilling into one county never hides the rest of
+            the country's boundaries. Skipped at national level, where the
+            choropleth already draws every county. */}
+        {outlineGeo && level !== "national" && (
+          <GeoJSON
+            key="national-outline"
+            data={outlineGeo}
+            interactive={false}
+            style={{
+              fillOpacity: 0,
+              color: "#f8fafc",
+              weight: 1,
+              opacity: 0.65,
+            }}
+          />
+        )}
         {geojson && (
           <>
             <GeoJSON
@@ -144,7 +236,11 @@ export default function TopicMap({
               style={styleFeature}
               onEachFeature={onEachFeature}
             />
-            <FitBounds geojson={geojson} />
+            <FitBounds
+              geojson={geojson}
+              selectedRegion={selectedRegion}
+              nameKey={nameKey}
+            />
           </>
         )}
       </MapContainer>

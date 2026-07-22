@@ -11,6 +11,42 @@ RUNTIME_DIR.mkdir(exist_ok=True)
 CACHE_DIR = RUNTIME_DIR / "cache"
 CACHE_DIR.mkdir(exist_ok=True)
 
+
+def _load_env_files(*names: str) -> None:
+    """Minimal, dependency-free ``.env`` loader.
+
+    Populates ``os.environ`` from ``KEY=VALUE`` lines in the given files (each
+    resolved under ``PROJECT_ROOT``) using ``setdefault``, so a variable already
+    present in the real environment is never overridden. Files are applied in
+    order, so an earlier file wins over a later one; the real environment always
+    wins over both — deployment secrets are never clobbered by a local file.
+    """
+
+    for name in names:
+        path = PROJECT_ROOT / name
+        if not path.exists():
+            continue
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            if key.startswith("export "):
+                key = key[len("export ") :].strip()
+            if not key:
+                continue
+            # Strip one layer of matching surrounding quotes, if present.
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+                value = value[1:-1]
+            os.environ.setdefault(key, value)
+
+
+# Load local secrets before any setting reads os.environ. `.env.local` (the
+# gitignored real-secrets file) takes precedence over an optional plain `.env`.
+_load_env_files(".env.local", ".env")
+
 DEBUG = os.environ.get("AEIS_DJANGO_DEBUG", "1").lower() in {"1", "true", "yes", "on"}
 SECRET_KEY = os.environ.get("AEIS_DJANGO_SECRET_KEY", "")
 if not SECRET_KEY:

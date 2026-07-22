@@ -2,9 +2,11 @@ import React, { useState } from "react";
 import IntelHub from "./pages/IntelHub";
 import AreaSelect from "./components/AreaSelect";
 import TopicWorkspace from "./pages/TopicWorkspace";
+import ReportsWorkspace from "./pages/ReportsWorkspace";
 import LandingPage from "./pages/LandingPage";
 import SiteHeader from "./components/SiteHeader";
 import AuthGateway, { readAuthSession, clearAuthSession } from "./components/AuthGateway";
+import StaffLogin from "./components/StaffLogin";
 // Shared tokens + glassmorphism + auth/KSA styles, then the app UI.
 import "./styles/theme.css";
 import "./styles/intel.css";
@@ -23,6 +25,8 @@ export default function AppIntel() {
   const [pendingTopic, setPendingTopic] = useState(null);
   // Signed-in visitor viewing the landing/home page rather than the app.
   const [atHome, setAtHome] = useState(false);
+  // Signed-in visitor viewing the Reports workspace (a top-level section).
+  const [atReports, setAtReports] = useState(false);
 
   const [activeTopic, setActiveTopic] = useState(null);
   const [area, setArea] = useState(null); // chosen scope { level, county, subcounty }
@@ -31,15 +35,27 @@ export default function AppIntel() {
     setActiveTopic(topicId);
     setArea(null);
     setAtHome(false);
+    setAtReports(false);
   };
 
   const backToHub = () => {
     setActiveTopic(null);
     setArea(null);
     setAtHome(false);
+    setAtReports(false);
   };
 
-  const goHome = () => setAtHome(true);
+  const goHome = () => {
+    setAtHome(true);
+    setAtReports(false);
+  };
+
+  const goReports = () => {
+    setAtReports(true);
+    setAtHome(false);
+    setActiveTopic(null);
+    setArea(null);
+  };
 
   const handleSignOut = () => {
     clearAuthSession();
@@ -47,6 +63,7 @@ export default function AppIntel() {
     setAuthScreen("landing");
     setPendingTopic(null);
     setAtHome(false);
+    setAtReports(false);
     setActiveTopic(null);
     setArea(null);
   };
@@ -80,12 +97,24 @@ export default function AppIntel() {
         </div>
       );
     }
+    if (authScreen === "staff") {
+      return (
+        <div className="intel-app">
+          <StaffLogin
+            onAuthenticated={handleAuthenticated}
+            onBack={() => { setAuthScreen("landing"); setPendingTopic(null); }}
+            onPublic={() => setAuthScreen("signin")}
+          />
+        </div>
+      );
+    }
     return (
       <div className="intel-app">
         <AuthGateway
           initialView={authScreen}
           onAuthenticated={handleAuthenticated}
           onBack={() => { setAuthScreen("landing"); setPendingTopic(null); }}
+          onStaff={() => setAuthScreen("staff")}
         />
       </div>
     );
@@ -102,6 +131,23 @@ export default function AppIntel() {
           onSignOut={handleSignOut}
           onExploreTopic={openTopic}
         />
+      </div>
+    );
+  }
+
+  // ── Signed in · Reports ──────────────────────────────────────
+  if (atReports) {
+    return (
+      <div className="intel-app">
+        <SiteHeader
+          user={session}
+          onHome={goHome}
+          onEnterHub={backToHub}
+          onReports={goReports}
+          onSignOut={handleSignOut}
+          active="reports"
+        />
+        <ReportsWorkspace user={session} />
       </div>
     );
   }
@@ -132,6 +178,7 @@ export default function AppIntel() {
         user={session}
         onHome={goHome}
         onEnterHub={backToHub}
+        onReports={goReports}
         onSignOut={handleSignOut}
         active={activeTopic ? undefined : "hub"}
       />

@@ -15,7 +15,7 @@ function suggestions(topic) {
 // AI insights panel. Analyses the current workspace (topic + scope + visible
 // regions) and returns insights with reasons. Tries the backend intelligence
 // endpoint first; on any failure falls back to the local analyser.
-export default function InsightPanel({ topicId, scope, regions }) {
+export default function InsightPanel({ topicId, scope, regions, dataStatus = "scaffolded" }) {
   const topic = getTopic(topicId);
   const [question, setQuestion] = useState("");
   const [insights, setInsights] = useState(null);
@@ -45,11 +45,19 @@ export default function InsightPanel({ topicId, scope, regions }) {
     setLoading(true);
     setInsights(null);
 
+    // Everything the backend needs to resolve scope and ground the analysis in
+    // exactly what is on screen: the topic (with unit/metric + source status)
+    // and the per-region values, plus the raw scope names for drill-down.
     const workspace = {
       topic: topic.label,
       topic_id: topicId,
+      unit: topic.unit,
+      metric: topic.metricLabel,
+      source_status: dataStatus,
       scope: scopeLabel(scope),
       level: scope.level,
+      county: scope.county || "",
+      subcounty: scope.subcounty || "",
       regions: regions.map((r) => ({ name: r.name, value: r.value })),
     };
 

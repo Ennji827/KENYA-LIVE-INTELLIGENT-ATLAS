@@ -68,7 +68,7 @@ function useGoogleGis(onToken) {
   return { ready, prompt, enabled: !!clientId };
 }
 
-export default function AuthGateway({ onAuthenticated, initialView = "signin", onBack }) {
+export default function AuthGateway({ onAuthenticated, initialView = "signin", onBack, onStaff }) {
   const [view, setView] = useState(initialView); // signin | register | forgot
 
   // Sign-in fields
@@ -257,6 +257,11 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
               Don't have an account?{" "}
               <button type="button" className="auth-link" onClick={() => setView("register")}>Create account</button>
             </p>
+            {onStaff && (
+              <p className="auth-switch">
+                <button type="button" className="auth-link" onClick={onStaff}>Government / staff access →</button>
+              </p>
+            )}
           </>
         )}
 

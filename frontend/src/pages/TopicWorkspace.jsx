@@ -250,6 +250,11 @@ export default function TopicWorkspace({
         <section className="panel panel--chart">
           <div className="panel__head">
             <h3>Top {childTier} by {topic.metricLabel.toLowerCase()}</h3>
+            <span className="panel__hint">
+              {scope.level === "national"
+                ? "Click a name to drill into that county"
+                : "Click a name to zoom to that sub-county"}
+            </span>
           </div>
           <div className="chart-wrap">
             <ResponsiveContainer width="100%" height={260}>
@@ -263,13 +268,18 @@ export default function TopicWorkspace({
                   type="category"
                   dataKey="name"
                   width={110}
-                  tick={{ fontSize: 11 }}
+                  tick={<ClickableAxisTick onSelect={handleDrill} />}
                 />
                 <Tooltip
                   formatter={(v) => formatValue(topicId, v)}
                   cursor={{ fill: "rgba(148,163,184,0.15)" }}
                 />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                <Bar
+                  dataKey="value"
+                  radius={[0, 4, 4, 0]}
+                  cursor="pointer"
+                  onClick={(d) => d?.name && handleDrill(d.name)}
+                >
                   {chartData.map((d) => (
                     <Cell
                       key={d.name}
@@ -284,7 +294,12 @@ export default function TopicWorkspace({
 
         {/* AI insights */}
         <section className="panel panel--insight">
-          <InsightPanel topicId={topicId} scope={scope} regions={regions} />
+          <InsightPanel
+            topicId={topicId}
+            scope={scope}
+            regions={regions}
+            dataStatus={liveState === "live" ? "connected" : "scaffolded"}
+          />
         </section>
       </div>
 
@@ -305,6 +320,26 @@ export default function TopicWorkspace({
         />
       )}
     </div>
+  );
+}
+
+// A clickable Y-axis category label. Recharts injects x/y/payload; clicking the
+// region name drills into it (national → county, county → focus the sub-county),
+// which zooms the map to that region.
+function ClickableAxisTick({ x, y, payload, onSelect }) {
+  const name = payload?.value;
+  return (
+    <text
+      x={x}
+      y={y}
+      dy={4}
+      textAnchor="end"
+      className="chart-axis-tick"
+      onClick={() => name && onSelect?.(name)}
+    >
+      <title>{`Zoom to ${name}`}</title>
+      {name}
+    </text>
   );
 }
 

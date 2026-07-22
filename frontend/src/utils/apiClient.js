@@ -130,9 +130,38 @@ export const postIntelligenceQuery = (body) =>
   request("/api/intelligence/query", { method: "POST", body }); // protected + permission
 
 // ── Reports ──────────────────────────────────────────────────────
-export const fetchReports = (query) => request("/api/reports", { query }); // protected
+export const fetchReports = (query) => request("/api/reports", { query }); // protected (report_read)
+export const fetchReport = (reportId) => request(`/api/reports/${reportId}`); // protected
 export const createReport = (body) =>
-  request("/api/reports", { method: "POST", body }); // protected
+  request("/api/reports", { method: "POST", body }); // protected (report_generate)
+// Move a report along its workflow (draft → reviewed → approved → published).
+// Role enforcement lives on the backend; the client mirrors it for button gating.
+export const transitionReport = (reportId, status, note = "") =>
+  request(`/api/reports/${reportId}/transition`, { method: "POST", body: { status, note } });
+
+// Export a report as a file. Unlike the JSON helpers this returns a Blob, so the
+// bearer token must ride on the request manually (an <a href> can't send headers).
+export async function downloadReport(reportId, exportFormat) {
+  const headers = {};
+  const token = sessionToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(
+    `${getApiBase()}/api/reports/${reportId}/export/${enc(exportFormat)}`,
+    { headers },
+  );
+  if (!res.ok) {
+    let payload = {};
+    try {
+      payload = await res.json();
+    } catch {
+      /* non-JSON error body */
+    }
+    const err = new Error(payload.error || `Export failed (${res.status}).`);
+    err.status = res.status;
+    throw err;
+  }
+  return { blob: await res.blob(), filename: `aeis-report-${reportId}.${exportFormat}` };
+}
 
 // ── Field reports ────────────────────────────────────────────────
 export const fetchFieldReports = (query) =>
