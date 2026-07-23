@@ -24,6 +24,17 @@ $TaskName = "AEIS-K Always On"
 $BackendUrl = "http://127.0.0.1:8000"
 $FrontendUrl = "http://localhost:5173"
 
+function Get-AeisDefaultDbPath {
+  $localDataRoot = if ($env:LOCALAPPDATA) {
+    Join-Path $env:LOCALAPPDATA "AEIS-K"
+  }
+  else {
+    Join-Path $Runtime "local-data"
+  }
+  New-Item -ItemType Directory -Force $localDataRoot | Out-Null
+  return (Join-Path $localDataRoot "aeis-live.sqlite3")
+}
+
 function Get-AeisPython {
   $venvPython = Join-Path $Root ".venv\Scripts\python.exe"
   if (Test-Path -LiteralPath $venvPython) {
@@ -46,6 +57,11 @@ function Get-LanIp {
 
 function Set-AeisEnvironment {
   New-Item -ItemType Directory -Force $Runtime | Out-Null
+  $env:PYTHONDONTWRITEBYTECODE = "1"
+  $env:AEIS_CACHE_BACKEND = "locmem"
+  if (-not $env:AEIS_DB_PATH) {
+    $env:AEIS_DB_PATH = Get-AeisDefaultDbPath
+  }
   $secretPath = Join-Path $Runtime "django-secret-key"
   if (-not $env:AEIS_DJANGO_SECRET_KEY) {
     if (-not (Test-Path -LiteralPath $secretPath)) {
@@ -65,7 +81,7 @@ function Set-AeisEnvironment {
 function Test-HttpHealth {
   param([string]$Url)
   try {
-    $response = Invoke-RestMethod -Uri $Url -TimeoutSec 4
+    $response = Invoke-RestMethod -Uri $Url -TimeoutSec 30
     return $response.status -eq "healthy"
   }
   catch {
@@ -78,18 +94,37 @@ function Get-PortOwner {
   $connection = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
     Select-Object -First 1
   if (-not $connection) { return $null }
-  return Get-CimInstance Win32_Process -Filter "ProcessId=$($connection.OwningProcess)"
+  try {
+    return Get-CimInstance Win32_Process -Filter "ProcessId=$($connection.OwningProcess)" -ErrorAction Stop
+  }
+  catch {
+    return [pscustomobject]@{
+      ProcessId = $connection.OwningProcess
+      Name = "PID $($connection.OwningProcess)"
+      CommandLine = ""
+    }
+  }
+}
+
+function Get-FreePort {
+  param(
+    [int]$Start = 5173,
+    [int]$End = 5199
+  )
+  for ($port = $Start; $port -le $End; $port++) {
+    if (-not (Get-PortOwner $port)) { return $port }
+  }
+  throw "No free frontend development port found between $Start and $End."
 }
 
 function Test-AeisProcess {
   param($Process)
   if (-not $Process -or -not $Process.CommandLine) { return $false }
   return (
-    $Process.CommandLine -like "*$Root*" -and (
-      $Process.CommandLine -like "*aeis_django.wsgi*" -or
-      $Process.CommandLine -like "*manage.py*process_aeis_jobs*" -or
-      $Process.CommandLine -like "*vite*"
-    )
+    $Process.CommandLine -like "*aeis_django.wsgi*" -or
+    $Process.CommandLine -like "*django_backend*manage.py*process_aeis_jobs*" -or
+    $Process.CommandLine -like "*manage.py*process_aeis_jobs*" -or
+    ($Process.CommandLine -like "*vite*" -and $Process.CommandLine -like "*$Frontend*")
   )
 }
 
@@ -97,14 +132,28 @@ function Get-AeisProcesses {
   Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Where-Object {
       $_.ProcessId -ne $PID -and
-      $_.CommandLine -and
-      $_.CommandLine -like "*$Root*" -and (
+        $_.CommandLine -and
+      (
         $_.CommandLine -like "*aeis_django.wsgi*" -or
         $_.CommandLine -like "*manage.py*process_aeis_jobs*" -or
-        $_.CommandLine -like "*vite*" -or
+        ($_.CommandLine -like "*vite*" -and $_.CommandLine -like "*$Frontend*") -or
         $_.CommandLine -like "*aeis.ps1*serve*"
       )
     }
+}
+
+function Test-WorkerHeartbeat {
+  $heartbeat = Join-Path $Runtime "worker.heartbeat"
+  if (-not (Test-Path -LiteralPath $heartbeat)) { return $false }
+  try {
+    $state = Get-Content -LiteralPath $heartbeat -Raw | ConvertFrom-Json
+    if ($state.status -ne "running") { return $false }
+  }
+  catch {
+    return $false
+  }
+  $age = (Get-Date) - (Get-Item -LiteralPath $heartbeat).LastWriteTime
+  return $age.TotalSeconds -lt 10
 }
 
 function Stop-AeisProcesses {
@@ -147,6 +196,8 @@ function Initialize-Aeis {
 }
 
 function Start-Worker {
+  if (Test-WorkerHeartbeat) { return }
+
   $existing = @(Get-AeisProcesses | Where-Object { $_.CommandLine -like "*manage.py*process_aeis_jobs*" })
   if ($existing.Count -gt 0) { return }
 
@@ -161,6 +212,8 @@ function Start-Worker {
 }
 
 function Start-Backend {
+  if (Test-HttpHealth "$BackendUrl/health") { return }
+
   $owner = Get-PortOwner 8000
   if ($owner) {
     if (Test-AeisProcess $owner) { return }
@@ -195,29 +248,32 @@ function Start-Backend {
 function Start-ManagedRuntime {
   param([bool]$Prepare = $true)
   if ($Prepare) {
-    Initialize-Aeis -BuildFrontend $true
+    Initialize-Aeis -BuildFrontend $false
   }
   else {
     Set-AeisEnvironment
   }
-  Start-Worker
   Start-Backend
+  Start-Worker
 }
 
 function Start-FrontendDevelopment {
-  $owner = Get-PortOwner 5173
+  $port = 5173
+  $owner = Get-PortOwner $port
   if ($owner) {
     if (Test-AeisProcess $owner) {
       Write-Host "AEIS-K development frontend is already running." -ForegroundColor Yellow
-      Write-Host $FrontendUrl -ForegroundColor Green
+      Write-Host "http://localhost:$port" -ForegroundColor Green
       return
     }
-    throw "Port 5173 is used by $($owner.Name) (PID $($owner.ProcessId)). Stop that application first."
+    $port = Get-FreePort -Start 5174 -End 5199
+    Write-Host "Port 5173 is already used by $($owner.Name) (PID $($owner.ProcessId))." -ForegroundColor Yellow
+    Write-Host "Starting AEIS-K development frontend on http://localhost:$port instead." -ForegroundColor Yellow
   }
 
   Push-Location $Frontend
   try {
-    & npm.cmd run dev:raw
+    & npm.cmd run dev:raw -- --port $port
   }
   finally {
     Pop-Location
@@ -239,8 +295,9 @@ function Show-AeisStatus {
   Write-Host "-------------"
   Write-Host "Production dashboard: $(if (Test-HttpHealth "$BackendUrl/health") { "HEALTHY  $BackendUrl" } else { "STOPPED" })"
   Write-Host "Development frontend: $(if ($frontendOwner -and (Test-AeisProcess $frontendOwner)) { "RUNNING  $FrontendUrl" } else { "STOPPED" })"
-  Write-Host "Background worker:    $(if ($workerCount -gt 0) { "RUNNING" } else { "STOPPED" })"
+  Write-Host "Background worker:    $(if ($workerCount -gt 0 -or (Test-WorkerHeartbeat)) { "RUNNING" } else { "STOPPED" })"
   Write-Host "Automatic startup:    $(if ($task) { "$($task.State) ($TaskName)" } else { "NOT INSTALLED" })"
+  Write-Host "Runtime database:     $(if ($env:AEIS_DB_PATH) { $env:AEIS_DB_PATH } else { Get-AeisDefaultDbPath })"
   if ($backendOwner) {
     Write-Host "Port 8000 PID:         $($backendOwner.ProcessId)"
   }
@@ -251,7 +308,7 @@ function Show-AeisStatus {
 }
 
 function Install-AeisStartup {
-  Initialize-Aeis -BuildFrontend $true
+  Initialize-Aeis -BuildFrontend $false
   Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 
   $powerShell = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
@@ -357,8 +414,8 @@ switch ($Action) {
     Set-AeisEnvironment
     while ($true) {
       try {
-        Start-Worker
         Start-Backend
+        Start-Worker
       }
       catch {
         Add-Content -LiteralPath (Join-Path $Runtime "supervisor.log") -Value "$(Get-Date -Format o) $($_.Exception.Message)"

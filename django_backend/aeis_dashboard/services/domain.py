@@ -192,7 +192,7 @@ GEE_LAYER_CONFIG = {
         "env": "AEIS_GEE_NDWI_TILE_URL",
         "type": "moisture",
         "opacity": 0.72,
-        "note": "Earth Engine Sentinel-2 NDWI or agricultural NDWI tile URL from an authenticated backend.",
+        "note": "Earth Engine Sentinel-2 NDWI or vegetation/water NDWI tile URL from an authenticated backend.",
     },
     "geeLst": {
         "label": "GEE Landsat LST",
@@ -252,19 +252,19 @@ def dashboard_source_required_intelligence(county: str) -> dict:
             {"label": "Admin boundary", "value": "Loaded from GeoJSON"},
             {"label": "Live forecast", "value": "Shown below map"},
             {"label": "NDVI/NDWI values", "value": "Source required"},
-            {"label": "Farmer registry", "value": "Source required"},
+            {"label": "Field/site registry", "value": "Source required"},
         ],
         "sourceReadiness": [
             {"label": "Admin boundaries", "score": 100, "status": "Loaded"},
             {"label": "Live weather forecast", "score": 100, "status": "Connected"},
-            {"label": "County farmer registry", "score": 0, "status": "Source required"},
+            {"label": "County field/site registry", "score": 0, "status": "Source required"},
             {"label": "NDVI/NDWI raster source", "score": 0, "status": "Source required"},
             {"label": "Land-cover classification", "score": 0, "status": "Source required"},
         ],
         "anomalyFlags": [
             {
                 "type": "Operational analytics",
-                "detail": "No county stress, NDVI, NDWI, rainfall-history, or fertilizer decisions are published without a connected source.",
+                "detail": "No county vegetation, water, land-use, rainfall-history, soil/input, or road decisions are published without a connected source.",
                 "tone": "medium",
             }
         ],
@@ -272,7 +272,7 @@ def dashboard_source_required_intelligence(county: str) -> dict:
             {
                 "priority": "Required",
                 "title": "Connect official data",
-                "detail": f"Connect {county} farmer registry, farm boundaries, NDVI/NDWI rasters, land-cover classification, and official rainfall history before publishing county decisions.",
+                "detail": f"Connect {county} field/site registry, mapped boundaries, NDVI/NDWI rasters, land-cover classification, water, roads, soil, and official rainfall history before publishing county decisions.",
             }
         ],
     }
@@ -367,16 +367,16 @@ def dashboard_summary_payload() -> dict:
     return {
         "summary": {
             "title": "AEIS-K Intelligence Dashboard",
-            "subtitle": "Agro-Environmental Intelligence System for Kenya",
+            "subtitle": "Climate, Water and Land Intelligence System for Kenya",
             **operational,
             "countiesTracked": count,
             "weatherCoverage": count,
             "boundaryCoverage": count,
             "dataGaps": [
                 "Provider-backed NDVI/NDWI analytical rasters",
-                "Verified county farmer and farm-boundary registries",
+                "Verified county field/site and mapped-boundary registries",
                 "Classified land-cover percentages",
-                "Soil-test and fertilizer-demand records",
+                "Soil-test, road, and land-management input records",
             ],
         },
         "counties": county_rows,
@@ -476,7 +476,7 @@ def realtime_operations_payload(identifier: str | None = None) -> dict:
             "ingestedCounties": 1 if selected else len(county_rows),
         },
         "events": events,
-        "source_note": "Rainfall, NDVI, NDWI, crop-stress, fertilizer, and farmer-registry events require official connected feeds before they are published.",
+        "source_note": "Rainfall, NDVI, NDWI, vegetation-stress, water, soil/input, road, and field/site events require official connected feeds before they are published.",
     }
 
 
@@ -620,11 +620,11 @@ def weather_risk(daily: list[dict]) -> str:
 def weather_advisory(risk: str, daily: list[dict]) -> str:
     next_rain = sum((row.get("precipitation_sum") or 0) for row in daily[:3])
     if risk == "High":
-        return "Issue rainfall watch, protect fertilizer distribution from runoff risk, and prepare field advisories."
+        return "Issue rainfall watch, protect vulnerable roads, water points, and field operations from runoff risk, and prepare county advisories."
     if risk == "Heat / dry watch":
-        return "Prioritize moisture conservation advice and delay nitrogen-heavy recommendations until rain improves."
+        return "Prioritize moisture conservation advice and delay water-sensitive field operations until rain improves."
     if risk == "Medium":
-        return "Proceed with advisory planning, but verify rain timing before top-dressing or spraying operations."
+        return "Proceed with advisory planning, but verify rain timing before field, road, or drainage operations."
     if next_rain <= 2:
         return "Low rainfall expected in the next three days; monitor moisture stress and irrigation demand."
     return "Favorable short-term forecast; continue staged county operations and routine monitoring."
@@ -859,15 +859,15 @@ def classify_ndwi_value(value: float) -> dict:
         }
     if value < 0.15:
         return {
-            "label": "Low crop moisture",
+            "label": "Low vegetation moisture",
             "tone": "high",
-            "meaning": "Canopy water is low. Check rainfall, irrigation, and soil moisture before fertilizer action.",
+            "meaning": "Canopy water is low. Check rainfall, irrigation, water availability, and soil moisture before land-management action.",
         }
     if value < 0.35:
         return {
             "label": "Adequate moisture",
             "tone": "low",
-            "meaning": "Moisture signal is generally acceptable for active crop growth.",
+            "meaning": "Moisture signal is generally acceptable for active vegetation.",
         }
     if value < 0.55:
         return {
@@ -888,10 +888,10 @@ def index_action(ndvi: float, ndwi: float) -> str:
     if ndvi >= 0.55 and ndwi < 0.15:
         return "Green canopy but moisture is weak. Monitor closely and delay nitrogen-heavy action until moisture is confirmed."
     if ndvi >= 0.55 and 0.15 <= ndwi <= 0.55:
-        return "Vegetation and moisture support staged fertilizer planning, subject to crop stage and soil test verification."
+        return "Vegetation and moisture support staged land-management planning, subject to land-use class and soil test verification."
     if ndwi > 0.55:
-        return "Verify waterlogging, wetland, cloud, or water contamination before using this as crop health evidence."
-    return "Use as planning evidence with rainfall, crop calendar, field reports, and raster metadata."
+        return "Verify waterlogging, wetland, cloud, or water contamination before using this as vegetation-health evidence."
+    return "Use as planning evidence with rainfall, land-use context, field reports, and raster metadata."
 
 
 def evaluate_indices_payload(payload: dict) -> tuple[int, dict]:
@@ -950,7 +950,7 @@ def evaluate_indices_payload(payload: dict) -> tuple[int, dict]:
             "ndvi": ndvi,
             "ndwi": ndwi,
             "ndvi_formula": "NDVI = (NIR - Red) / (NIR + Red)",
-            "ndwi_formula": "Agricultural NDWI = (NIR - SWIR) / (NIR + SWIR)",
+            "ndwi_formula": "Vegetation/soil-water NDWI = (NIR - SWIR) / (NIR + SWIR)",
         },
         "classification": {
             "ndvi": classify_ndvi_value(ndvi),
@@ -1000,10 +1000,10 @@ def system_actualization_payload() -> dict:
             "evidence": "Open-Meteo live forecast endpoint connected; official county station/KMD feed still recommended",
         },
         {
-            "name": "Farmer registry and farm boundaries",
+            "name": "Field/site registry and mapped boundaries",
             "status": "baseline",
             "readiness": 55,
-            "evidence": "County-level baseline exists; replace with verified county farm records",
+            "evidence": "County-level baseline exists; replace with verified county field/site and mapped-boundary records",
         },
         {
             "name": "Reports and exports",
@@ -1016,7 +1016,7 @@ def system_actualization_payload() -> dict:
     blockers = [
         "Connect actual NDVI/NDWI raster bands with source date, cloud mask, sensor, and processing method.",
         "Connect official rainfall/weather provider or county station observations.",
-        "Replace baseline farmer counts with verified county farmer registry and farm boundaries.",
+        "Replace baseline field/site counts with verified county registry and mapped boundaries.",
         "Move demo passwords to a production identity provider or managed password reset workflow.",
     ]
     next_actions = [
@@ -1368,7 +1368,7 @@ def request_overpass(query: str) -> dict:
         data=body,
         headers={
             "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
-            "User-Agent": "AEIS-K/0.1 local agricultural intelligence dashboard",
+            "User-Agent": "AEIS-K/0.1 climate-water-land intelligence dashboard",
         },
         method="POST",
     )

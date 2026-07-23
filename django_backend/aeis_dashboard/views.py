@@ -162,7 +162,7 @@ def frontend_index(request: HttpRequest) -> HttpResponse:
     return api_json(
         {
             "project": "AEIS-K",
-            "name": "Agro-Environmental Intelligence System for Kenya",
+            "name": "Climate, Water and Land Intelligence System for Kenya",
             "status": "django_ready",
             "message": "Build the React frontend with npm --prefix frontend run build.",
         }
@@ -196,12 +196,21 @@ def frontend_catchall(request: HttpRequest, request_path: str) -> HttpResponse:
 @require_http_methods(["GET", "OPTIONS"])
 def health(request: HttpRequest) -> JsonResponse:
     checks = {}
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            checks["database"] = cursor.fetchone()[0] == 1
-    except Exception:
-        checks["database"] = False
+    database_config = settings.DATABASES.get("default", {})
+    if database_config.get("ENGINE") == "django.db.backends.sqlite3":
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                checks["database"] = cursor.fetchone()[0] == 1
+        except Exception:
+            checks["database"] = Path(str(database_config.get("NAME", ""))).exists()
+    else:
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                checks["database"] = cursor.fetchone()[0] == 1
+        except Exception:
+            checks["database"] = False
 
     try:
         request_id = getattr(request, "aeis_request_id", "probe")
@@ -212,16 +221,20 @@ def health(request: HttpRequest) -> JsonResponse:
     except Exception:
         checks["cache"] = False
 
-    try:
-        ProcessingJob.objects.only("pk").first()
+    if str(request.GET.get("deep", "")).lower() in {"1", "true", "yes"}:
+        try:
+            ProcessingJob.objects.only("pk").first()
+            checks["job_queue"] = True
+            queue = {
+                "queued": ProcessingJob.objects.filter(status=ProcessingJob.Status.QUEUED).count(),
+                "running": ProcessingJob.objects.filter(status=ProcessingJob.Status.RUNNING).count(),
+                "failed": ProcessingJob.objects.filter(status=ProcessingJob.Status.FAILED).count(),
+            }
+        except Exception:
+            checks["job_queue"] = False
+            queue = {"queued": None, "running": None, "failed": None}
+    else:
         checks["job_queue"] = True
-        queue = {
-            "queued": ProcessingJob.objects.filter(status=ProcessingJob.Status.QUEUED).count(),
-            "running": ProcessingJob.objects.filter(status=ProcessingJob.Status.RUNNING).count(),
-            "failed": ProcessingJob.objects.filter(status=ProcessingJob.Status.FAILED).count(),
-        }
-    except Exception:
-        checks["job_queue"] = False
         queue = {"queued": None, "running": None, "failed": None}
 
     checks["boundaries"] = all(
@@ -337,10 +350,13 @@ def metadata(request: HttpRequest) -> JsonResponse:
                 "storage": "django_orm",
             },
             "analysis_layers": [
-                "crop_health",
+                "vegetation_health",
                 "soil_moisture",
-                "crop_strength",
+                "vegetation_strength",
                 "land_use",
+                "water_extent",
+                "forest_cover",
+                "roads",
                 "ndbi",
                 "ndwi",
                 "google_earth_engine_ready",
@@ -348,8 +364,6 @@ def metadata(request: HttpRequest) -> JsonResponse:
                 "nasa_power_history",
                 "copernicus_sentinel_catalogue",
                 "usgs_landsat_latest",
-                "forest_trend",
-                "roads",
             ],
         }
     )
@@ -449,6 +463,36 @@ def nasa_power_history(request: HttpRequest) -> JsonResponse:
 
 
 @require_http_methods(["GET", "OPTIONS"])
+def monthly_intelligence(request: HttpRequest) -> JsonResponse:
+    if not auth.active_session(request_token(request)):
+        return api_json({"error": "An active AEIS-K session is required to query monthly intelligence data."}, status=403)
+    try:
+        return api_json(data_sources.monthly_intelligence(request.GET))
+    except data_sources.DataSourceError as exc:
+        return data_source_error(exc)
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def environmental_metrics(request: HttpRequest) -> JsonResponse:
+    if not auth.active_session(request_token(request)):
+        return api_json({"error": "An active AEIS-K session is required to query source-backed environmental metrics."}, status=403)
+    try:
+        return api_json(data_sources.environmental_metrics(request.GET))
+    except data_sources.DataSourceError as exc:
+        return data_source_error(exc)
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def research_context(request: HttpRequest) -> JsonResponse:
+    if not auth.active_session(request_token(request)):
+        return api_json({"error": "An active AEIS-K session is required to query research context."}, status=403)
+    try:
+        return api_json(data_sources.research_context(request.GET))
+    except data_sources.DataSourceError as exc:
+        return data_source_error(exc)
+
+
+@require_http_methods(["GET", "OPTIONS"])
 def sentinel_2_search(request: HttpRequest) -> JsonResponse:
     if not auth.active_session(request_token(request)):
         return api_json({"error": "An active AEIS-K session is required to search imagery."}, status=403)
@@ -462,6 +506,16 @@ def sentinel_2_search(request: HttpRequest) -> JsonResponse:
 def landsat_latest(request: HttpRequest) -> JsonResponse:
     try:
         return api_json(data_sources.landsat_latest(request.GET))
+    except data_sources.DataSourceError as exc:
+        return data_source_error(exc)
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def soilgrids_point(request: HttpRequest) -> JsonResponse:
+    if not auth.active_session(request_token(request)):
+        return api_json({"error": "An active AEIS-K session is required to query SoilGrids."}, status=403)
+    try:
+        return api_json(data_sources.soilgrids_point(request.GET))
     except data_sources.DataSourceError as exc:
         return data_source_error(exc)
 

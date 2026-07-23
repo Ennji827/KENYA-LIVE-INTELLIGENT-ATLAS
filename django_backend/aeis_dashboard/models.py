@@ -191,6 +191,110 @@ class DataQualityAssessment(models.Model):
     assessed_at = models.DateTimeField(auto_now=True)
 
 
+class MonthlyClimateObservation(models.Model):
+    """Reviewed monthly county climate records imported from official/local sources."""
+
+    source_slug = models.SlugField(default="reviewed-local-climate")
+    source_name = models.CharField(max_length=180)
+    provider = models.CharField(max_length=140, blank=True)
+    county_name = models.CharField(max_length=100, db_index=True)
+    county_code = models.CharField(max_length=8, blank=True, db_index=True)
+    observation_month = models.DateField(db_index=True)
+    rainfall_mm = models.FloatField(null=True, blank=True)
+    temperature_c = models.FloatField(null=True, blank=True)
+    temperature_max_c = models.FloatField(null=True, blank=True)
+    temperature_min_c = models.FloatField(null=True, blank=True)
+    humidity_pct = models.FloatField(null=True, blank=True)
+    wind_ms = models.FloatField(null=True, blank=True)
+    solar_mj_m2_day = models.FloatField(null=True, blank=True)
+    station_count = models.PositiveSmallIntegerField(null=True, blank=True)
+    quality_flag = models.CharField(max_length=32, blank=True, default="reviewed")
+    notes = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    imported_by = models.ForeignKey(
+        AEISUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="imported_monthly_climate_observations",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["observation_month", "county_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_slug", "county_code", "county_name", "observation_month"],
+                name="aeis_mco_src_scope_month_uq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["county_name", "observation_month"], name="aeis_mco_county_month_idx"),
+            models.Index(fields=["source_slug", "observation_month"], name="aeis_mco_source_month_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.county_name} {self.observation_month:%Y-%m} ({self.source_slug})"
+
+
+class EnvironmentalMetricObservation(models.Model):
+    """Reviewed source-backed environmental, land, infrastructure, and raster metrics."""
+
+    class PeriodGrain(models.TextChoices):
+        DAILY = "daily", "Daily"
+        MONTHLY = "monthly", "Monthly"
+        SEASONAL = "seasonal", "Seasonal"
+        ANNUAL = "annual", "Annual"
+        SURVEY = "survey", "Survey / release"
+
+    source_slug = models.SlugField()
+    source_name = models.CharField(max_length=180)
+    provider = models.CharField(max_length=140, blank=True)
+    metric_key = models.SlugField(max_length=80, db_index=True)
+    metric_label = models.CharField(max_length=160)
+    category = models.CharField(max_length=40, db_index=True)
+    unit = models.CharField(max_length=40)
+    value = models.FloatField()
+    period_start = models.DateField(db_index=True)
+    period_end = models.DateField(db_index=True)
+    period_grain = models.CharField(max_length=16, choices=PeriodGrain.choices, default=PeriodGrain.ANNUAL)
+    scope_level = models.CharField(max_length=20, default="county", db_index=True)
+    scope_name = models.CharField(max_length=160, blank=True, db_index=True)
+    scope_code = models.CharField(max_length=40, blank=True, db_index=True)
+    confidence = models.CharField(max_length=16, choices=DataQualityAssessment.Confidence.choices, default=DataQualityAssessment.Confidence.MEDIUM)
+    method = models.CharField(max_length=120, blank=True)
+    quality_flag = models.CharField(max_length=32, blank=True, default="reviewed")
+    notes = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    imported_by = models.ForeignKey(
+        AEISUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="imported_environmental_metric_observations",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["period_start", "category", "metric_key", "scope_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_slug", "metric_key", "scope_level", "scope_code", "scope_name", "period_start", "period_end"],
+                name="aeis_emo_src_metric_uq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["category", "metric_key", "period_start"], name="aeis_emo_category_metric_idx"),
+            models.Index(fields=["scope_level", "scope_name", "period_start"], name="aeis_emo_scope_period_idx"),
+            models.Index(fields=["source_slug", "period_start"], name="aeis_emo_source_period_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.scope_name or self.scope_level} {self.metric_key} {self.period_start:%Y-%m-%d}"
+
+
 class Alert(models.Model):
     class Severity(models.TextChoices):
         LOW = "low", "Low"

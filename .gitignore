@@ -12,6 +12,7 @@ __pycache__/
 
 # AEIS-K runtime data
 .runtime/
+backups/
 *.db
 *.db-*
 

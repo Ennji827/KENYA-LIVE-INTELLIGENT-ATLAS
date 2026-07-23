@@ -139,7 +139,7 @@ def create_report(user: AEISUser, payload: dict) -> IntelligenceReport:
         user,
         {
             "question": payload.get("question")
-            or "Generate a professional report using the available agricultural, climate, GIS, and field evidence.",
+            or "Generate a professional report using the available climate, water, land-use, GIS, road, soil, and field evidence.",
             "scope_level": payload.get("scope_level") or "national",
             "scope_name": payload.get("scope_name") or payload.get("county") or "",
             "insight_type": "report",

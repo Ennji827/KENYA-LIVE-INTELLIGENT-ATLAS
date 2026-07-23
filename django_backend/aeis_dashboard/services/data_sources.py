@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from calendar import monthrange
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import hashlib
 import json
@@ -17,9 +19,19 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 from django.core.validators import URLValidator
 from django.db import transaction
+from django.db.models import Count as models_count, Max as models_max, Q
 from django.utils.text import slugify
 
-from aeis_dashboard.models import DataAsset, DataQualityAssessment, ExternalDataSource
+from aeis_dashboard.models import (
+    Alert,
+    DataAsset,
+    DataQualityAssessment,
+    EnvironmentalMetricObservation,
+    ExternalDataSource,
+    FieldReport,
+    IntelligenceReport,
+    MonthlyClimateObservation,
+)
 
 from . import domain
 
@@ -30,7 +42,8 @@ LANDSAT_STAC_SEARCH_URL = "https://landsatlook.usgs.gov/stac-server/search"
 DEAFRICA_STAC_SEARCH_URL = "https://explorer.digitalearth.africa/stac/search"
 DEAFRICA_WMS_URL = "https://ows.digitalearth.africa/wms"
 DEAFRICA_WMS_CAPABILITIES_URL = f"{DEAFRICA_WMS_URL}?service=WMS&request=GetCapabilities&version=1.3.0"
-MAX_HISTORY_DAYS = 366 * 12
+SOILGRIDS_PROPERTIES_URL = "https://rest.isric.org/soilgrids/v2.0/properties/query"
+MAX_HISTORY_DAYS = 366 * 22
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 GEOJSON_PARSE_LIMIT = 30 * 1024 * 1024
 ALLOWED_PARAMETERS = {
@@ -43,6 +56,36 @@ ALLOWED_PARAMETERS = {
     "ALLSKY_SFC_SW_DWN",
 }
 DEFAULT_PARAMETERS = ["PRECTOTCORR", "T2M", "T2M_MAX", "T2M_MIN", "RH2M", "WS2M"]
+MONTHLY_INTELLIGENCE_PARAMETERS = [
+    "PRECTOTCORR",
+    "T2M",
+    "T2M_MAX",
+    "T2M_MIN",
+    "RH2M",
+    "WS2M",
+    "ALLSKY_SFC_SW_DWN",
+]
+ENVIRONMENTAL_METRIC_CATALOG = {
+    "ndvi": {"label": "NDVI", "category": "vegetation", "unit": "index", "min": -1, "max": 1},
+    "ndwi": {"label": "NDWI", "category": "water", "unit": "index", "min": -1, "max": 1},
+    "lst_c": {"label": "Land surface temperature", "category": "vegetation", "unit": "°C", "min": -30, "max": 80},
+    "water_extent_ha": {"label": "Surface water extent", "category": "water", "unit": "ha", "min": 0, "max": 10000000},
+    "water_extent_pct": {"label": "Surface water share", "category": "water", "unit": "%", "min": 0, "max": 100},
+    "forest_cover_ha": {"label": "Forest cover", "category": "forest", "unit": "ha", "min": 0, "max": 10000000},
+    "forest_cover_pct": {"label": "Forest cover share", "category": "forest", "unit": "%", "min": 0, "max": 100},
+    "tree_cover_pct": {"label": "Tree cover share", "category": "forest", "unit": "%", "min": 0, "max": 100},
+    "cropland_pct": {"label": "Cropland share", "category": "landuse", "unit": "%", "min": 0, "max": 100},
+    "built_up_pct": {"label": "Built-up / housing share", "category": "landuse", "unit": "%", "min": 0, "max": 100},
+    "grassland_pct": {"label": "Grassland / shrubland share", "category": "landuse", "unit": "%", "min": 0, "max": 100},
+    "bare_land_pct": {"label": "Bare / sparse land share", "category": "landuse", "unit": "%", "min": 0, "max": 100},
+    "land_use_share_pct": {"label": "Land-use class share", "category": "landuse", "unit": "%", "min": 0, "max": 100},
+    "tarmac_road_km": {"label": "Tarmac road length", "category": "roads", "unit": "km", "min": 0, "max": 1000000},
+    "all_weather_road_km": {"label": "All-weather road length", "category": "roads", "unit": "km", "min": 0, "max": 1000000},
+    "road_density_km_per_100sqkm": {"label": "Road density", "category": "roads", "unit": "km/100 km²", "min": 0, "max": 5000},
+    "soil_organic_carbon_pct": {"label": "Soil organic carbon", "category": "soil", "unit": "%", "min": 0, "max": 30},
+    "soil_ph": {"label": "Soil pH", "category": "soil", "unit": "pH", "min": 0, "max": 14},
+    "soil_moisture_pct": {"label": "Soil moisture", "category": "soil", "unit": "%", "min": 0, "max": 100},
+}
 FILE_FORMATS = {
     ".geojson": ("geojson", DataAsset.AssetType.VECTOR),
     ".json": ("geojson", DataAsset.AssetType.VECTOR),
@@ -79,6 +122,75 @@ BUILTIN_SOURCES = [
         "description": "Key-free ten-day weather forecasts using the provider's best-match model.",
     },
     {
+        "slug": "kenya-meteorological-department",
+        "name": "Kenya Meteorological Department official weather and climate data",
+        "provider": "Kenya Meteorological Department",
+        "source_type": "climate",
+        "coverage_start": None,
+        "coverage_end": None,
+        "latest_available": "publication-dependent",
+        "requires_auth": False,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "website": "https://meteo.go.ke/",
+            "maproom": "http://kmddl.meteo.go.ke:8081/",
+            "climate_data_management": "https://meteo.go.ke/",
+        },
+        "description": "Preferred local source for official station rainfall, monthly forecasts, seasonal forecasts, agrometeorological bulletins, and climate data management. Connect via API, reviewed CSV, or licensed data export before publishing official county figures.",
+    },
+    {
+        "slug": "kalro-kaop-weather",
+        "name": "KALRO / KAOP agro-weather and advisory data",
+        "provider": "Kenya Agricultural and Livestock Research Organization",
+        "source_type": "climate",
+        "coverage_start": None,
+        "coverage_end": None,
+        "latest_available": "publication-dependent",
+        "requires_auth": False,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "kaop": "https://kaop.co.ke/",
+            "documentation": "https://www.kalro.org/",
+        },
+        "description": "Preferred local agro-weather and advisory source when KALRO/KAOP data access is available. Use for county and crop-zone weather context after an API key, data-sharing agreement, or reviewed export is connected.",
+    },
+    {
+        "slug": "county-field-site-registry",
+        "name": "County field and site registry",
+        "provider": "County Government / Ministry of Agriculture",
+        "source_type": "registry",
+        "coverage_start": None,
+        "coverage_end": None,
+        "latest_available": "county-dependent",
+        "requires_auth": False,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "nakuru_county": "https://www.nakuru.go.ke/",
+            "upload": "/api/data/assets/upload",
+        },
+        "description": "Verified county field, farm, irrigation, soil-test, site-boundary, and mapped-area records. Import reviewed CSV/GeoJSON/GPKG records before publishing county site counts or mapped area.",
+    },
+    {
+        "slug": "moald-kamis-kiamis",
+        "name": "MoALD KAMIS/KIAMIS agricultural registry feeds",
+        "provider": "Ministry of Agriculture and Livestock Development",
+        "source_type": "registry",
+        "coverage_start": None,
+        "coverage_end": None,
+        "latest_available": "access-dependent",
+        "requires_auth": True,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "ministry": "https://kilimo.go.ke/",
+            "upload": "/api/data/assets/upload",
+        },
+        "description": "Potential official farmer/site/production registry source. Connect only after authorized access or reviewed exports are available.",
+    },
+    {
         "slug": "nasa-power",
         "name": "NASA POWER climate history",
         "provider": "NASA Langley Research Center",
@@ -91,6 +203,7 @@ BUILTIN_SOURCES = [
         "access": "connected",
         "endpoints": {
             "history": "/api/data/history/nasa-power",
+            "monthly_intelligence": "/api/data/intelligence/monthly",
             "documentation": "https://power.larc.nasa.gov/docs/services/api/temporal/",
         },
         "description": "Daily and monthly precipitation, temperature, humidity, wind, and solar data.",
@@ -146,6 +259,121 @@ BUILTIN_SOURCES = [
         },
         "description": "Provider-rendered NDVI, NDWI, and land-surface-temperature tile layers.",
     },
+    {
+        "slug": "dynamic-world",
+        "name": "Dynamic World near-real-time land cover",
+        "provider": "Google / World Resources Institute",
+        "source_type": "landcover",
+        "coverage_start": "2015-06-27",
+        "coverage_end": None,
+        "latest_available": "near-real-time",
+        "requires_auth": True,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "documentation": "https://developers.google.com/earth-engine/datasets/catalog/GOOGLE_DYNAMICWORLD_V1",
+            "metric_import": "/api/data/intelligence/metrics",
+        },
+        "description": "Near-real-time global land-cover probabilities derived from Sentinel-2. Use reviewed zonal statistics before publishing land-use percentages.",
+    },
+    {
+        "slug": "knbs-statistical-portals",
+        "name": "KNBS statistical and county data portals",
+        "provider": "Kenya National Bureau of Statistics",
+        "source_type": "other",
+        "coverage_start": None,
+        "coverage_end": None,
+        "latest_available": "publication-dependent",
+        "requires_auth": False,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "documentation": "https://www.knbs.or.ke/",
+        },
+        "description": "Official statistical tables for county indicators, land use, population, housing, and infrastructure. Connect as reviewed CSV/API extracts before publishing official county percentages.",
+    },
+    {
+        "slug": "jrc-global-surface-water",
+        "name": "Global Surface Water history",
+        "provider": "European Commission Joint Research Centre",
+        "source_type": "water",
+        "coverage_start": "1984-03-01",
+        "coverage_end": None,
+        "latest_available": "annual product",
+        "requires_auth": False,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "documentation": "https://global-surface-water.appspot.com/",
+        },
+        "description": "Long-running global surface-water occurrence, seasonality, transitions, and yearly history for water expansion/shrinkage consoles.",
+    },
+    {
+        "slug": "esa-worldcover",
+        "name": "ESA WorldCover land-cover classes",
+        "provider": "European Space Agency",
+        "source_type": "landcover",
+        "coverage_start": "2020-01-01",
+        "coverage_end": None,
+        "latest_available": "latest annual release",
+        "requires_auth": False,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "documentation": "https://esa-worldcover.org/",
+        },
+        "description": "Global land-cover products for cropland, tree cover, built-up area, grassland, bare/sparse land, and water classification.",
+    },
+    {
+        "slug": "isric-soilgrids",
+        "name": "SoilGrids soil properties",
+        "provider": "ISRIC - World Soil Information",
+        "source_type": "soil",
+        "coverage_start": None,
+        "coverage_end": None,
+        "latest_available": "current model",
+        "requires_auth": False,
+        "enabled": True,
+        "access": "connected_catalogue",
+        "endpoints": {
+            "point": "/api/data/soil/soilgrids",
+            "documentation": "https://soilgrids.org/",
+        },
+        "description": "Global gridded soil organic carbon, texture, pH, bulk density, and related soil-property layers.",
+    },
+    {
+        "slug": "openstreetmap-roads",
+        "name": "OpenStreetMap road network",
+        "provider": "OpenStreetMap contributors",
+        "source_type": "infrastructure",
+        "coverage_start": None,
+        "coverage_end": None,
+        "latest_available": "community-updated",
+        "requires_auth": False,
+        "enabled": True,
+        "access": "connected_catalogue",
+        "endpoints": {
+            "segmentation": "/api/segmentation/roads",
+            "documentation": "https://wiki.openstreetmap.org/wiki/Map_features#Highway",
+        },
+        "description": "Road geometry and tags for highway class, surface, and access. Use with QA before publishing tarmac/all-weather road metrics.",
+    },
+    {
+        "slug": "kenya-roads-board",
+        "name": "Kenya road classification records",
+        "provider": "Kenya Roads Board / official road agencies",
+        "source_type": "infrastructure",
+        "coverage_start": None,
+        "coverage_end": None,
+        "latest_available": "publication-dependent",
+        "requires_auth": False,
+        "enabled": True,
+        "access": "source_required",
+        "endpoints": {
+            "documentation": "https://krb.go.ke/",
+        },
+        "description": "Authoritative national/county road classifications and road condition records, recommended for tarmac and all-weather road dashboards.",
+    },
 ]
 
 
@@ -154,6 +382,37 @@ def _iso(value) -> str | None:
 
 
 def source_catalog() -> dict:
+    today = date.today()
+    recommended_start = date(today.year - 20, 1, 1)
+    monthly_sources = {
+        row["source_slug"]: row
+        for row in MonthlyClimateObservation.objects.values("source_slug")
+        .annotate(count=models_count("id"), latest=models_max("observation_month"))
+    }
+    metric_sources = {
+        row["source_slug"]: row
+        for row in EnvironmentalMetricObservation.objects.values("source_slug")
+        .annotate(count=models_count("id"), latest=models_max("period_end"))
+    }
+    builtin_sources = []
+    for source in BUILTIN_SOURCES:
+        source_payload = dict(source)
+        local_monthly = monthly_sources.get(source["slug"])
+        local_metrics = metric_sources.get(source["slug"])
+        if local_monthly or local_metrics:
+            latest_candidates = [
+                item["latest"]
+                for item in [local_monthly, local_metrics]
+                if item and item.get("latest")
+            ]
+            count = int((local_monthly or {}).get("count") or 0) + int((local_metrics or {}).get("count") or 0)
+            source_payload["access"] = "connected"
+            source_payload["latest_available"] = max(latest_candidates).isoformat() if latest_candidates else None
+            source_payload["description"] = (
+                f"{source['description']} AEIS-K has {count} reviewed observation(s) "
+                "imported from this source."
+            )
+        builtin_sources.append(source_payload)
     custom = [
         {
             "slug": source.slug,
@@ -174,16 +433,18 @@ def source_catalog() -> dict:
     ]
     assets = DataAsset.objects.all()
     return {
-        "sources": [*BUILTIN_SOURCES, *custom],
+        "sources": [*builtin_sources, *custom],
         "summary": {
-            "connected_apis": sum(1 for source in BUILTIN_SOURCES if source["access"].startswith("connected")),
+            "connected_apis": sum(1 for source in builtin_sources if source["access"].startswith("connected")),
             "registered_apis": len(custom),
             "uploaded_assets": assets.count(),
             "latest_upload": _iso(assets.first().created_at) if assets.exists() else None,
+            "reviewed_monthly_climate_records": MonthlyClimateObservation.objects.count(),
+            "reviewed_environmental_metric_records": EnvironmentalMetricObservation.objects.count(),
         },
         "history_window": {
-            "recommended_start": (date.today() - timedelta(days=3652)).isoformat(),
-            "end": date.today().isoformat(),
+            "recommended_start": recommended_start.isoformat(),
+            "end": today.isoformat(),
         },
         "generated_at": domain.now_iso(),
     }
@@ -280,7 +541,7 @@ def nasa_power_history(query) -> dict:
     if requested_start > requested_end:
         raise DataSourceError("start must be on or before end.")
     if (requested_end - requested_start).days > MAX_HISTORY_DAYS:
-        raise DataSourceError("One request may cover at most twelve years.")
+        raise DataSourceError("One request may cover at most twenty-two years.")
 
     lat, lon, scope = _location(query.get("county"), query.get("latitude"), query.get("longitude"))
     parameters = _parameters(query.get("parameters"))
@@ -364,6 +625,1031 @@ def nasa_power_history(query) -> dict:
     }
 
 
+def _clamp(value: float | None, minimum: float = 0, maximum: float = 100) -> float | None:
+    if value is None or not math.isfinite(value):
+        return None
+    return round(max(minimum, min(maximum, value)), 1)
+
+
+def _mean(values: list[float | int | None]) -> float | None:
+    valid = [float(value) for value in values if isinstance(value, (int, float)) and math.isfinite(float(value))]
+    if not valid:
+        return None
+    return sum(valid) / len(valid)
+
+
+def _sum(values: list[float | int | None]) -> float | None:
+    valid = [float(value) for value in values if isinstance(value, (int, float)) and math.isfinite(float(value))]
+    if not valid:
+        return None
+    return sum(valid)
+
+
+def _round(value: float | None, digits: int = 1) -> float | None:
+    if value is None or not math.isfinite(value):
+        return None
+    return round(value, digits)
+
+
+def _parameter_units(history: dict, parameter: str) -> str:
+    return str((history.get("parameters") or {}).get(parameter, {}).get("units") or "").lower()
+
+
+def _monthly_rainfall_mm(row: dict, units: str) -> float | None:
+    raw = row.get("PRECTOTCORR")
+    if not isinstance(raw, (int, float)) or not math.isfinite(float(raw)):
+        return None
+    try:
+        parsed = date.fromisoformat(str(row.get("date")))
+    except (TypeError, ValueError):
+        return _round(float(raw))
+    if "mm/day" in units or "mm d" in units:
+        return _round(float(raw) * monthrange(parsed.year, parsed.month)[1])
+    return _round(float(raw))
+
+
+def _monthly_record_from_values(
+    parsed: date,
+    rainfall_mm: float | None,
+    temp: float | None,
+    temp_max: float | None,
+    temp_min: float | None,
+    humidity: float | None,
+    wind: float | None,
+    solar: float | None,
+    county_name: str | None = None,
+    source_payload: dict | None = None,
+) -> dict:
+    rainfall_score = 0 if rainfall_mm is None else min(100, rainfall_mm / 220 * 100)
+    humidity_score = 50 if humidity is None else humidity
+    heat_penalty = 0 if temp is None else max(0, temp - 26) * 2.8
+    water_pressure = _clamp((rainfall_score * 0.64) + (humidity_score * 0.36) - heat_penalty)
+    temp_support = 55 if temp is None else max(0, 100 - abs(temp - 24) * 7)
+    vegetation_support = _clamp(((water_pressure or 0) * 0.68) + (temp_support * 0.32))
+    soil_moisture_proxy = _clamp(((water_pressure or 0) * 0.78) + (humidity_score * 0.22) - heat_penalty / 2)
+    dryness_pressure = _clamp(100 - (water_pressure or 0) + max(0, (temp or 24) - 28) * 2 + max(0, (wind or 2) - 4) * 3)
+
+    record = {
+        "date": parsed.isoformat(),
+        "month": parsed.strftime("%b %Y"),
+        "year": parsed.year,
+        "month_index": parsed.month,
+        "rainfall_mm": rainfall_mm,
+        "temperature_c": temp,
+        "temperature_max_c": temp_max,
+        "temperature_min_c": temp_min,
+        "humidity_pct": humidity,
+        "wind_ms": wind,
+        "solar_mj_m2_day": solar,
+        "water_pressure_index": water_pressure,
+        "vegetation_support_index": vegetation_support,
+        "soil_moisture_proxy": soil_moisture_proxy,
+        "dryness_pressure_index": dryness_pressure,
+    }
+    if county_name:
+        record["county"] = county_name
+    if source_payload:
+        record.update(source_payload)
+    return record
+
+
+def _monthly_record(row: dict, rainfall_units: str, county_name: str | None = None) -> dict:
+    parsed = date.fromisoformat(str(row["date"]))
+    return _monthly_record_from_values(
+        parsed=parsed,
+        rainfall_mm=_monthly_rainfall_mm(row, rainfall_units),
+        temp=_round(float(row["T2M"]), 1) if isinstance(row.get("T2M"), (int, float)) else None,
+        temp_max=_round(float(row["T2M_MAX"]), 1) if isinstance(row.get("T2M_MAX"), (int, float)) else None,
+        temp_min=_round(float(row["T2M_MIN"]), 1) if isinstance(row.get("T2M_MIN"), (int, float)) else None,
+        humidity=_round(float(row["RH2M"]), 1) if isinstance(row.get("RH2M"), (int, float)) else None,
+        wind=_round(float(row["WS2M"]), 1) if isinstance(row.get("WS2M"), (int, float)) else None,
+        solar=_round(float(row["ALLSKY_SFC_SW_DWN"]), 1)
+        if isinstance(row.get("ALLSKY_SFC_SW_DWN"), (int, float))
+        else None,
+        county_name=county_name,
+        source_payload={
+            "data_mode": "open_provider",
+            "source": "NASA POWER",
+            "source_slug": "nasa-power",
+            "provider": "NASA Langley Research Center",
+            "quality_flag": "provider_record",
+        },
+    )
+
+
+def _local_monthly_record(observation: MonthlyClimateObservation) -> dict:
+    return _monthly_record_from_values(
+        parsed=observation.observation_month,
+        rainfall_mm=_round(observation.rainfall_mm),
+        temp=_round(observation.temperature_c, 1),
+        temp_max=_round(observation.temperature_max_c, 1),
+        temp_min=_round(observation.temperature_min_c, 1),
+        humidity=_round(observation.humidity_pct, 1),
+        wind=_round(observation.wind_ms, 1),
+        solar=_round(observation.solar_mj_m2_day, 1),
+        county_name=observation.county_name,
+        source_payload={
+            "data_mode": "official_reviewed",
+            "source": observation.source_name,
+            "source_slug": observation.source_slug,
+            "provider": observation.provider or observation.source_name,
+            "county_code": observation.county_code,
+            "quality_flag": observation.quality_flag or "reviewed",
+            "station_count": observation.station_count,
+            "notes": observation.notes,
+        },
+    )
+
+
+def _annual_summaries(records: list[dict]) -> list[dict]:
+    annual: dict[int, list[dict]] = {}
+    for row in records:
+        annual.setdefault(int(row["year"]), []).append(row)
+    return [
+        {
+            "year": year,
+            "rainfall_mm": _round(_sum([row.get("rainfall_mm") for row in rows])),
+            "temperature_c": _round(_mean([row.get("temperature_c") for row in rows])),
+            "water_pressure_index": _round(_mean([row.get("water_pressure_index") for row in rows])),
+            "vegetation_support_index": _round(_mean([row.get("vegetation_support_index") for row in rows])),
+            "soil_moisture_proxy": _round(_mean([row.get("soil_moisture_proxy") for row in rows])),
+            "dryness_pressure_index": _round(_mean([row.get("dryness_pressure_index") for row in rows])),
+        }
+        for year, rows in sorted(annual.items())
+    ]
+
+
+def _monthly_normals(records: list[dict]) -> list[dict]:
+    monthly: dict[int, list[dict]] = {}
+    for row in records:
+        monthly.setdefault(int(row["month_index"]), []).append(row)
+    return [
+        {
+            "month_index": month,
+            "month": date(2024, month, 1).strftime("%b"),
+            "rainfall_mm": _round(_mean([row.get("rainfall_mm") for row in rows])),
+            "temperature_c": _round(_mean([row.get("temperature_c") for row in rows])),
+            "water_pressure_index": _round(_mean([row.get("water_pressure_index") for row in rows])),
+            "vegetation_support_index": _round(_mean([row.get("vegetation_support_index") for row in rows])),
+            "soil_moisture_proxy": _round(_mean([row.get("soil_moisture_proxy") for row in rows])),
+            "dryness_pressure_index": _round(_mean([row.get("dryness_pressure_index") for row in rows])),
+        }
+        for month, rows in sorted(monthly.items())
+    ]
+
+
+def _six_month_outlook(normals: list[dict]) -> list[dict]:
+    normal_by_month = {row["month_index"]: row for row in normals}
+    today = date.today()
+    outlook = []
+    for offset in range(1, 7):
+        month = ((today.month - 1 + offset) % 12) + 1
+        year = today.year + ((today.month - 1 + offset) // 12)
+        normal = normal_by_month.get(month, {})
+        outlook.append(
+            {
+                "date": date(year, month, 1).isoformat(),
+                "month": date(2024, month, 1).strftime("%b"),
+                "rainfall_mm": normal.get("rainfall_mm"),
+                "temperature_c": normal.get("temperature_c"),
+                "water_pressure_index": normal.get("water_pressure_index"),
+                "vegetation_support_index": normal.get("vegetation_support_index"),
+                "soil_moisture_proxy": normal.get("soil_moisture_proxy"),
+                "method": "historical monthly normal",
+            }
+        )
+    return outlook
+
+
+def _console_readiness(
+    records: list[dict],
+    scope: str,
+    climate_source_label: str = "source-backed monthly records",
+    rainfall_status: str = "source_backed",
+) -> dict:
+    has_monthly = bool(records)
+    scope_text = "county" if scope == "county" else "national"
+    return {
+        "rainfall": {
+            "status": rainfall_status if has_monthly else "source_required",
+            "metric": "Monthly rainfall history",
+            "source": climate_source_label,
+            "note": f"{scope_text.title()} monthly rainfall is populated from source records.",
+        },
+        "water": {
+            "status": "partial" if has_monthly else "source_required",
+            "metric": "Monthly water-pressure proxy",
+            "source": f"{climate_source_label} rainfall, humidity, and temperature",
+            "note": "True surface-water extent still requires JRC Global Surface Water or Earth Engine NDWI zonal statistics.",
+        },
+        "vegetation": {
+            "status": "partial" if has_monthly else "source_required",
+            "metric": "Monthly vegetation-support proxy",
+            "source": f"{climate_source_label} rainfall and temperature",
+            "note": "True NDVI/NDWI anomalies still require Sentinel/Landsat raster processing.",
+        },
+        "forest": {
+            "status": "partial" if has_monthly else "source_required",
+            "metric": "Monthly dryness-pressure proxy",
+            "source": f"{climate_source_label} rainfall, temperature, and wind",
+            "note": "True forest cover/loss still requires ESA WorldCover or Earth Engine classification.",
+        },
+        "soil": {
+            "status": "partial" if has_monthly else "source_required",
+            "metric": "Monthly soil-moisture proxy",
+            "source": f"{climate_source_label} rainfall, humidity, and temperature",
+            "note": "True soil properties should be connected through SoilGrids or verified soil-test uploads.",
+        },
+        "landuse": {
+            "status": "source_required",
+            "metric": "Land-use shares",
+            "source": "KNBS, ESA WorldCover, Sentinel/Landsat classification",
+            "note": "Monthly climate context is available, but land-use percentages must come from classified land-cover products.",
+        },
+        "roads": {
+            "status": "source_required",
+            "metric": "Road length and road surface",
+            "source": "Kenya Roads Board and OpenStreetMap QA extracts",
+            "note": "Monthly rainfall exposure is available, but road length/surface metrics need official or QA-reviewed OSM extraction.",
+        },
+        "county": {
+            "status": "live" if has_monthly else "source_required",
+            "metric": "Monthly county/national climate profile",
+            "source": "NASA POWER plus AEIS-K county boundaries",
+            "note": f"{scope_text.title()} monthly context is available for decision briefs.",
+        },
+    }
+
+
+def _normalise_history(history: dict, county_name: str | None = None) -> list[dict]:
+    rainfall_units = _parameter_units(history, "PRECTOTCORR")
+    return [_monthly_record(row, rainfall_units, county_name) for row in history.get("records", [])]
+
+
+def _local_monthly_observations(start: date, end: date, county: str | None = None) -> tuple[list[dict], dict]:
+    queryset = MonthlyClimateObservation.objects.filter(observation_month__gte=start, observation_month__lte=end)
+    scope_name = "Kenya"
+    center = {"latitude": None, "longitude": None}
+    if county:
+        feature = domain.find_county(county)
+        if not feature:
+            raise DataSourceError("County not found.", 404)
+        scope_name = domain.county_name(feature)
+        county_code = domain.county_code(feature)
+        lat, lon = domain.county_weather_center(feature)
+        center = {"latitude": lat, "longitude": lon}
+        queryset = queryset.filter(Q(county_name__iexact=scope_name) | Q(county_code=county_code))
+
+    observations = list(queryset.order_by("observation_month", "county_name", "source_slug", "id"))
+    records = [_local_monthly_record(row) for row in observations]
+    source_names = sorted({row.source_name for row in observations if row.source_name})
+    source_slugs = sorted({row.source_slug for row in observations if row.source_slug})
+    return records, {
+        "scope_name": scope_name,
+        "center": center,
+        "source_names": source_names,
+        "source_slugs": source_slugs,
+        "observation_count": len(observations),
+    }
+
+
+def _source_priority(row: dict) -> tuple[int, str]:
+    slug = str(row.get("source_slug") or "").strip().lower()
+    mode = str(row.get("data_mode") or "").strip().lower()
+    priority = {
+        "kenya-meteorological-department": 0,
+        "kalro-kaop-weather": 1,
+        "reviewed-local-climate": 2,
+        "knbs-statistical-portals": 3,
+        "nasa-power": 10,
+    }.get(slug, 4 if mode == "official_reviewed" else 20)
+    return priority, slug
+
+
+def _preferred_county_month_records(records: list[dict]) -> list[dict]:
+    preferred: dict[tuple[str, str], dict] = {}
+    for row in records:
+        county_name = str(row.get("county") or "").strip()
+        record_date = str(row.get("date") or "").strip()
+        if not county_name or not record_date:
+            continue
+        key = (county_name.lower(), record_date)
+        current = preferred.get(key)
+        if current is None or _source_priority(row) < _source_priority(current):
+            preferred[key] = row
+    return sorted(preferred.values(), key=lambda row: (row["date"], row.get("county") or ""))
+
+
+def _aggregate_monthly_records(county_records: list[dict]) -> list[dict]:
+    grouped: dict[str, list[dict]] = {}
+    for row in county_records:
+        grouped.setdefault(str(row["date"]), []).append(row)
+    records = []
+    for date_key, rows in sorted(grouped.items()):
+        parsed = date.fromisoformat(date_key)
+        records.append(
+            {
+                "date": parsed.isoformat(),
+                "month": parsed.strftime("%b %Y"),
+                "year": parsed.year,
+                "month_index": parsed.month,
+                "county_count": len({row.get("county") for row in rows if row.get("county")}),
+                "data_mode": "mixed_source_backed"
+                if len({row.get("data_mode") for row in rows if row.get("data_mode")}) > 1
+                else next((row.get("data_mode") for row in rows if row.get("data_mode")), "source_backed"),
+                "source": "Mixed source-backed county records"
+                if len({row.get("source") for row in rows if row.get("source")}) > 1
+                else next((row.get("source") for row in rows if row.get("source")), ""),
+                "source_slugs": sorted({row.get("source_slug") for row in rows if row.get("source_slug")}),
+                "rainfall_mm": _round(_mean([row.get("rainfall_mm") for row in rows])),
+                "temperature_c": _round(_mean([row.get("temperature_c") for row in rows])),
+                "temperature_max_c": _round(_mean([row.get("temperature_max_c") for row in rows])),
+                "temperature_min_c": _round(_mean([row.get("temperature_min_c") for row in rows])),
+                "humidity_pct": _round(_mean([row.get("humidity_pct") for row in rows])),
+                "wind_ms": _round(_mean([row.get("wind_ms") for row in rows])),
+                "solar_mj_m2_day": _round(_mean([row.get("solar_mj_m2_day") for row in rows])),
+                "water_pressure_index": _round(_mean([row.get("water_pressure_index") for row in rows])),
+                "vegetation_support_index": _round(_mean([row.get("vegetation_support_index") for row in rows])),
+                "soil_moisture_proxy": _round(_mean([row.get("soil_moisture_proxy") for row in rows])),
+                "dryness_pressure_index": _round(_mean([row.get("dryness_pressure_index") for row in rows])),
+            }
+        )
+    return records
+
+
+def _county_statistics(county_records: list[dict], county_names: list[str]) -> list[dict]:
+    grouped: dict[str, list[dict]] = {}
+    for row in county_records:
+        county = str(row.get("county") or "").strip()
+        if county:
+            grouped.setdefault(county, []).append(row)
+
+    statistics = []
+    for index, county_name in enumerate(county_names):
+        rows = sorted(grouped.get(county_name, []), key=lambda row: row["date"])
+        annual = _annual_summaries(rows)
+        latest_annual = annual[-1] if annual else {}
+        recent_rows = rows[-12:] if rows else []
+        source_slugs = sorted({str(row.get("source_slug") or "").strip() for row in rows if row.get("source_slug")})
+        source_names = sorted({str(row.get("source") or "").strip() for row in rows if row.get("source")})
+        data_modes = {str(row.get("data_mode") or "").strip() for row in rows}
+        feature = domain.find_county(county_name)
+        boundary_code = domain.county_code(feature) if feature else ""
+        imported_code = next((str(row.get("county_code") or "").strip() for row in rows if row.get("county_code")), "")
+        statistics.append(
+            {
+                "county": county_name,
+                "county_code": imported_code or boundary_code or f"{index + 1:03d}",
+                "record_count": len(rows),
+                "latest_available": rows[-1]["date"] if rows else None,
+                "latest_year": latest_annual.get("year"),
+                "latest_annual_rainfall_mm": latest_annual.get("rainfall_mm"),
+                "average_monthly_rainfall_mm": _round(_mean([row.get("rainfall_mm") for row in rows])),
+                "recent_12_month_rainfall_mm": _round(_sum([row.get("rainfall_mm") for row in recent_rows])),
+                "average_temperature_c": _round(_mean([row.get("temperature_c") for row in rows])),
+                "water_pressure_index": _round(_mean([row.get("water_pressure_index") for row in rows])),
+                "vegetation_support_index": _round(_mean([row.get("vegetation_support_index") for row in rows])),
+                "soil_moisture_proxy": _round(_mean([row.get("soil_moisture_proxy") for row in rows])),
+                "dryness_pressure_index": _round(_mean([row.get("dryness_pressure_index") for row in rows])),
+                "status": "official_reviewed"
+                if "official_reviewed" in data_modes
+                else "source_backed"
+                if rows
+                else "source_required",
+                "source": "; ".join(source_names[:3]) if source_names else "Source required",
+                "source_slugs": source_slugs,
+            }
+        )
+    return statistics
+
+
+def _monthly_intelligence_window(query) -> tuple[int, date, date]:
+    today = date.today()
+    try:
+        years = max(1, min(20, int(query.get("years", "20"))))
+    except ValueError as exc:
+        raise DataSourceError("years must be numeric.") from exc
+    provider_end = date(today.year - 1, 12, 31)
+    start = date(provider_end.year - years + 1, 1, 1)
+    return years, start, provider_end
+
+
+def monthly_intelligence(query) -> dict:
+    years, start, end = _monthly_intelligence_window(query)
+    county = str(query.get("county") or "").strip()
+    source_preference = str(query.get("source") or "auto").strip().lower()
+    if source_preference not in {"auto", "local", "open", "nasa", "nasa-power"}:
+        raise DataSourceError("source must be auto, local, open, nasa, or nasa-power.")
+    scope_key = f"{county.lower() or 'national'}:{source_preference}"
+    cache_key = f"monthly-intelligence:{scope_key}:{start.isoformat()}:{end.isoformat()}:{','.join(MONTHLY_INTELLIGENCE_PARAMETERS)}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
+    common_query = {
+        "temporal": "monthly",
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "parameters": ",".join(MONTHLY_INTELLIGENCE_PARAMETERS),
+    }
+
+    source_errors = []
+    source_urls = []
+    county_statistics = []
+    local_records: list[dict] = []
+    local_meta = {"scope_name": "Kenya", "center": {"latitude": None, "longitude": None}, "source_names": []}
+    use_open_fallback = source_preference in {"auto", "open", "nasa", "nasa-power"}
+    use_local_records = source_preference in {"auto", "local"}
+    if use_local_records:
+        local_records, local_meta = _local_monthly_observations(start, end, county or None)
+
+    if county:
+        if local_records:
+            scope = "county"
+            scope_name = str(local_meta.get("scope_name") or county)
+            center = local_meta["center"]
+            open_records: list[dict] = []
+            if use_open_fallback:
+                try:
+                    history = nasa_power_history({**common_query, "county": county})
+                    open_records = _normalise_history(history, history["scope"])
+                    source_urls.append(history["source_url"])
+                    center = {"latitude": history["latitude"], "longitude": history["longitude"]}
+                except DataSourceError as exc:
+                    source_errors.append({"county": scope_name, "error": str(exc), "status": exc.status})
+            records = _preferred_county_month_records([*local_records, *open_records])
+            county_statistics = _county_statistics(records, [scope_name])
+            if open_records:
+                source_label = "Reviewed local monthly records + NASA POWER fallback"
+                provider = "Reviewed local records + NASA POWER fallback"
+                source = "AEIS-K verified monthly observation store and NASA Langley Research Center"
+                rainfall_status = "mixed_source_backed"
+            else:
+                source_label = "; ".join(local_meta.get("source_names")[:3]) or "Reviewed local monthly climate records"
+                provider = "Reviewed local monthly climate records"
+                source = "AEIS-K verified monthly observation store"
+                rainfall_status = "official_reviewed"
+            aggregation = {
+                "method": "reviewed monthly county observations with open fallback for missing county-months"
+                if open_records
+                else "reviewed monthly county observations",
+                "county_count": 1,
+                "official_record_count": len(local_records),
+                "open_fallback_record_count": len(open_records),
+                "warning": "Rainfall and climate values come from reviewed imported records. Water, vegetation, forest, and soil metrics shown from these records are AEIS-K proxy indices, not direct raster measurements.",
+            }
+        elif use_open_fallback:
+            history = nasa_power_history({**common_query, "county": county})
+            records = _normalise_history(history)
+            county_statistics = _county_statistics(
+                [{**row, "county": history["scope"]} for row in records],
+                [history["scope"]],
+            )
+            scope = "county"
+            scope_name = history["scope"]
+            center = {"latitude": history["latitude"], "longitude": history["longitude"]}
+            source_urls.append(history["source_url"])
+            source_label = "NASA POWER monthly point data"
+            provider = "NASA POWER"
+            source = "NASA Langley Research Center"
+            rainfall_status = "source_backed"
+            aggregation = {
+                "method": "county centroid point",
+                "county_count": 1,
+                "open_fallback_count": 1,
+                "warning": "This is a real NASA POWER county-center climate time series, not an area-weighted zonal statistic.",
+            }
+        else:
+            raise DataSourceError(
+                f"No reviewed local monthly records are available for {county}. Use source=auto to allow NASA POWER open-source fallback.",
+                404,
+            )
+    else:
+        county_names = domain.dashboard_county_names()
+        county_records: list[dict] = _preferred_county_month_records(local_records)
+
+        def fetch_county(name: str) -> dict:
+            return nasa_power_history({**common_query, "county": name})
+
+        missing_county_names = county_names
+        if use_open_fallback:
+            with ThreadPoolExecutor(max_workers=6) as executor:
+                futures = {executor.submit(fetch_county, name): name for name in missing_county_names}
+                for future in as_completed(futures):
+                    name = futures[future]
+                    try:
+                        history = future.result()
+                        source_urls.append(history["source_url"])
+                        county_records.extend(_normalise_history(history, name))
+                    except DataSourceError as exc:
+                        source_errors.append({"county": name, "error": str(exc), "status": exc.status})
+        county_records = _preferred_county_month_records(county_records)
+        official_counties_used = {
+            row["county"] for row in county_records if row.get("county") and row.get("data_mode") == "official_reviewed"
+        }
+        fallback_counties_used = {
+            row["county"] for row in county_records if row.get("county") and row.get("source_slug") == "nasa-power"
+        }
+        if not county_records:
+            if source_preference == "local":
+                raise DataSourceError("No reviewed local monthly climate records have been imported yet.", 404)
+            raise DataSourceError("National monthly aggregation could not load any source-backed county records.", 503)
+        records = _aggregate_monthly_records(county_records)
+        county_statistics = _county_statistics(county_records, county_names)
+        scope = "national"
+        scope_name = "Kenya"
+        center = {"latitude": None, "longitude": None}
+        has_local = bool(official_counties_used)
+        has_fallback = bool(fallback_counties_used)
+        if has_local and has_fallback:
+            provider = "Reviewed local records + NASA POWER fallback"
+            source = "AEIS-K verified monthly observation store and NASA Langley Research Center"
+            source_label = "Reviewed local monthly records + NASA POWER fallback"
+            rainfall_status = "mixed_source_backed"
+        elif has_local:
+            provider = "Reviewed local monthly climate records"
+            source = "AEIS-K verified monthly observation store"
+            source_label = "; ".join(local_meta.get("source_names")[:3]) or "Reviewed local monthly climate records"
+            rainfall_status = "official_reviewed"
+        else:
+            provider = "NASA POWER"
+            source = "NASA Langley Research Center"
+            source_label = "NASA POWER monthly point data"
+            rainfall_status = "source_backed"
+        aggregation = {
+            "method": "mean of available county monthly records",
+            "county_count": len({row["county"] for row in county_records if row.get("county")}),
+            "expected_county_count": len(county_names),
+            "official_county_count": len(official_counties_used),
+            "open_fallback_county_count": len(fallback_counties_used),
+            "warning": "National values are averaged from available source-backed county records. Open fallback counties use real NASA POWER county-centre point data and are not area-weighted zonal statistics.",
+        }
+
+    annual = _annual_summaries(records)
+    normals = _monthly_normals(records)
+    latest = records[-1] if records else None
+    observed_metrics = environmental_metrics_summary(start, date.today(), county or None)
+    console_readiness = _console_readiness(records, scope, source_label, rainfall_status)
+    for category, metric_rows in observed_metrics.get("latest_by_category", {}).items():
+        if category in console_readiness and metric_rows:
+            source_names = sorted({row.get("source_name") for row in metric_rows if row.get("source_name")})
+            console_readiness[category]["status"] = "official_reviewed"
+            console_readiness[category]["source"] = "; ".join(source_names[:3]) or "Reviewed source-backed metric observations"
+            console_readiness[category]["note"] = (
+                "Real reviewed metric observations are available for this console. "
+                "Climate-derived proxy charts remain labelled separately."
+            )
+    payload = {
+        "provider": provider,
+        "source": source,
+        "source_type": "monthly_climate_intelligence",
+        "scope": scope,
+        "scope_name": scope_name,
+        "center": center,
+        "window_years": years,
+        "requested_start": start.isoformat(),
+        "requested_end": end.isoformat(),
+        "latest_available": latest["date"] if latest else None,
+        "earliest_available": records[0]["date"] if records else None,
+        "record_count": len(records),
+        "parameters": {
+            "rainfall_mm": "Monthly precipitation total from the selected source-backed record.",
+            "temperature_c": "Monthly mean 2 m air temperature.",
+            "humidity_pct": "Monthly mean relative humidity.",
+            "wind_ms": "Monthly mean wind speed.",
+            "water_pressure_index": "AEIS-K proxy from monthly rainfall, humidity, and temperature.",
+            "vegetation_support_index": "AEIS-K proxy from monthly rainfall and temperature.",
+            "soil_moisture_proxy": "AEIS-K proxy from monthly rainfall, humidity, and temperature.",
+            "dryness_pressure_index": "AEIS-K proxy from monthly water pressure, heat, and wind.",
+        },
+        "aggregation": aggregation,
+        "records": records,
+        "annual": annual,
+        "monthly_normals": normals,
+        "six_month_outlook": _six_month_outlook(normals),
+        "county_statistics": county_statistics,
+        "observed_metrics": observed_metrics,
+        "console_readiness": console_readiness,
+        "source_urls": source_urls[:5],
+        "source_error_count": len(source_errors),
+        "source_errors": source_errors[:12],
+        "source_note": "All displayed monthly values are source-backed. AEIS-K prefers reviewed Kenya-local KMD/KALRO/KNBS-style imports when present and uses NASA POWER only as a real open-source fallback. Water extent, NDVI/NDWI, forest cover, land-use shares, and road lengths remain source-gated until raster/vector zonal processing is connected.",
+        "generated_at": domain.now_iso(),
+    }
+    cache.set(cache_key, payload, 12 * 60 * 60)
+    return payload
+
+
+def _metric_window(query) -> tuple[int, date, date]:
+    today = date.today()
+    try:
+        years = max(1, min(30, int(query.get("years", "20"))))
+    except ValueError as exc:
+        raise DataSourceError("years must be numeric.") from exc
+    start = _parse_date(query.get("start"), date(today.year - years + 1, 1, 1))
+    end = _parse_date(query.get("end"), today)
+    if start > end:
+        raise DataSourceError("start must be on or before end.")
+    return years, start, end
+
+
+def _metric_payload(observation: EnvironmentalMetricObservation) -> dict:
+    return {
+        "id": observation.pk,
+        "source_slug": observation.source_slug,
+        "source_name": observation.source_name,
+        "provider": observation.provider,
+        "metric_key": observation.metric_key,
+        "metric_label": observation.metric_label,
+        "category": observation.category,
+        "unit": observation.unit,
+        "value": _round(observation.value, 3),
+        "period_start": observation.period_start.isoformat(),
+        "period_end": observation.period_end.isoformat(),
+        "period_grain": observation.period_grain,
+        "scope_level": observation.scope_level,
+        "scope_name": observation.scope_name,
+        "scope_code": observation.scope_code,
+        "confidence": observation.confidence,
+        "method": observation.method,
+        "quality_flag": observation.quality_flag,
+        "notes": observation.notes,
+    }
+
+
+def environmental_metrics_summary(start: date, end: date, county: str | None = None, category: str | None = None) -> dict:
+    queryset = EnvironmentalMetricObservation.objects.filter(period_end__gte=start, period_start__lte=end)
+    scope_name = "Kenya"
+    scope = "national"
+    if county:
+        feature = domain.find_county(county)
+        if not feature:
+            raise DataSourceError("County not found.", 404)
+        scope = "county"
+        scope_name = domain.county_name(feature)
+        county_code = domain.county_code(feature)
+        queryset = queryset.filter(
+            scope_level="county",
+        ).filter(Q(scope_name__iexact=scope_name) | Q(scope_code=county_code))
+    if category:
+        queryset = queryset.filter(category=category)
+
+    ordered = list(queryset.order_by("-period_end", "-period_start", "category", "metric_key", "scope_name")[:500])
+    latest_by_key: dict[tuple[str, str, str], dict] = {}
+    for observation in ordered:
+        key = (observation.category, observation.metric_key, f"{observation.scope_level}:{observation.scope_code}:{observation.scope_name}")
+        if key not in latest_by_key:
+            latest_by_key[key] = _metric_payload(observation)
+
+    latest_by_category: dict[str, list[dict]] = {}
+    for row in latest_by_key.values():
+        latest_by_category.setdefault(row["category"], []).append(row)
+    for rows in latest_by_category.values():
+        rows.sort(key=lambda item: (item["metric_label"], item["scope_name"]))
+
+    coverage = [
+        {
+            "category": row["category"],
+            "record_count": row["record_count"],
+            "latest_available": row["latest"].isoformat() if row["latest"] else None,
+            "scope_count": row["scope_count"],
+        }
+        for row in queryset.values("category").annotate(
+            record_count=models_count("id"),
+            latest=models_max("period_end"),
+            scope_count=models_count("scope_name", distinct=True),
+        ).order_by("category")
+    ]
+    return {
+        "provider": "AEIS-K reviewed environmental metric store",
+        "scope": scope,
+        "scope_name": scope_name,
+        "requested_start": start.isoformat(),
+        "requested_end": end.isoformat(),
+        "record_count": queryset.count(),
+        "coverage": coverage,
+        "latest_by_category": latest_by_category,
+        "records": [_metric_payload(observation) for observation in ordered],
+        "source_note": "Only imported, reviewed, source-backed environmental metrics are returned. Missing categories remain source-required.",
+    }
+
+
+def environmental_metrics(query) -> dict:
+    _, start, end = _metric_window(query)
+    category = str(query.get("category") or "").strip().lower()
+    if category and category not in {item["category"] for item in ENVIRONMENTAL_METRIC_CATALOG.values()}:
+        raise DataSourceError("Unknown environmental metric category.")
+    metric_key = str(query.get("metric") or "").strip().lower()
+    summary = environmental_metrics_summary(start, end, str(query.get("county") or "").strip() or None, category or None)
+    if metric_key:
+        if metric_key not in ENVIRONMENTAL_METRIC_CATALOG:
+            raise DataSourceError("Unknown environmental metric.")
+        summary["records"] = [row for row in summary["records"] if row["metric_key"] == metric_key]
+        summary["record_count"] = len(summary["records"])
+        latest_by_category: dict[str, list[dict]] = {}
+        for category_key, rows in summary["latest_by_category"].items():
+            filtered = [row for row in rows if row["metric_key"] == metric_key]
+            if filtered:
+                latest_by_category[category_key] = filtered
+        summary["latest_by_category"] = latest_by_category
+    return summary
+
+
+def _scope_filter(queryset, field_name: str, scope_name: str):
+    if not scope_name:
+        return queryset
+    return queryset.filter(**{f"{field_name}__iexact": scope_name})
+
+
+def _boundary_context(county: str = "") -> dict:
+    county_feature = domain.find_county(county) if county else None
+    if county and not county_feature:
+        raise DataSourceError("County not found.", 404)
+    scope_name = domain.county_name(county_feature) if county_feature else "Kenya"
+    scope_code = domain.county_code(county_feature) if county_feature else ""
+
+    if county_feature:
+        subcounty_features = [
+            feature
+            for feature in domain.subcounties()
+            if (feature.get("properties") or {}).get("ADM1_EN") == scope_name
+        ]
+        ward_features = [
+            feature
+            for feature in domain.wards()
+            if (feature.get("properties") or {}).get("ADM1_EN") == scope_name
+        ]
+        if not ward_features:
+            county_bounds = domain.bbox(county_feature)
+            ward_features = [
+                feature
+                for feature in domain.wards()
+                if domain.point_in_bbox(domain.feature_center(feature), county_bounds)
+                and domain.point_in_feature(domain.feature_center(feature), county_feature)
+            ]
+    else:
+        subcounty_features = domain.subcounties()
+        ward_features = domain.wards()
+
+    subcounty_rows = []
+    ward_count_by_subcounty: dict[str, int] = {}
+    for ward in ward_features:
+        properties = ward.get("properties") or {}
+        parent = properties.get("ADM2_EN") or properties.get("SubCounty") or ""
+        if parent:
+            ward_count_by_subcounty[parent] = ward_count_by_subcounty.get(parent, 0) + 1
+
+    for feature in subcounty_features:
+        name = domain.subcounty_name(feature)
+        subcounty_rows.append(
+            {
+                "name": name,
+                "code": domain.subcounty_code(feature),
+                "county": (feature.get("properties") or {}).get("ADM1_EN") or scope_name,
+                "area_km2": round(domain.estimate_area_ha(feature) / 100, 2),
+                "ward_count": ward_count_by_subcounty.get(name, 0),
+                "status": "boundary_ready",
+            }
+        )
+    subcounty_rows.sort(key=lambda row: (row["county"], row["name"]))
+
+    ward_rows = [
+        {
+            "name": domain.ward_name(feature),
+            "code": domain.ward_code(feature),
+            "subcounty": (feature.get("properties") or {}).get("ADM2_EN") or (feature.get("properties") or {}).get("SubCounty") or "",
+            "county": (feature.get("properties") or {}).get("ADM1_EN") or scope_name,
+            "area_km2": round(domain.estimate_area_ha(feature) / 100, 2),
+            "status": "boundary_ready",
+        }
+        for feature in ward_features
+    ]
+    ward_rows.sort(key=lambda row: (row["county"], row["subcounty"], row["name"]))
+
+    county_rows = [
+        {
+            "name": domain.county_name(feature),
+            "code": domain.county_code(feature),
+            "area_km2": round(domain.estimate_area_ha(feature) / 100, 2),
+            "subcounty_count": domain.county_subcounty_count(domain.county_name(feature)),
+            "ward_count": domain.ward_count_for_county(feature),
+            "status": "boundary_ready",
+        }
+        for feature in (domain.counties() if not county_feature else [county_feature])
+    ]
+
+    return {
+        "scope": "county" if county_feature else "national",
+        "scope_name": scope_name,
+        "scope_code": scope_code,
+        "counties": county_rows,
+        "subcounties": subcounty_rows,
+        "wards": ward_rows,
+        "summary": {
+            "counties": len(county_rows),
+            "subcounties": len(subcounty_rows),
+            "wards": len(ward_rows),
+        },
+    }
+
+
+def _field_report_event(row: FieldReport) -> dict:
+    location = " / ".join(
+        part
+        for part in [row.county_name, row.subcounty_name, row.ward_name]
+        if part
+    )
+    return {
+        "type": "field_report",
+        "title": row.title,
+        "date": row.observation_date.isoformat(),
+        "location": location or row.county_name,
+        "county": row.county_name,
+        "subcounty": row.subcounty_name,
+        "ward": row.ward_name,
+        "status": row.verification_status,
+        "detail": row.observations[:260],
+        "source": "AEIS-K field report",
+    }
+
+
+def _alert_event(row: Alert) -> dict:
+    return {
+        "type": "alert",
+        "title": row.title,
+        "date": row.created_at.date().isoformat(),
+        "location": row.scope_name or "National",
+        "status": row.status,
+        "severity": row.severity,
+        "detail": row.description[:260],
+        "source": ", ".join(row.data_sources[:2]) if row.data_sources else "AEIS-K operational alert",
+    }
+
+
+def _report_event(row: IntelligenceReport) -> dict:
+    return {
+        "type": "intelligence_report",
+        "title": row.title,
+        "date": row.updated_at.date().isoformat(),
+        "location": row.scope_name or "Kenya",
+        "status": row.status,
+        "severity": row.risk_level,
+        "detail": (row.ai_summary or str((row.content or {}).get("executive_summary") or ""))[:260],
+        "source": "AEIS-K intelligence report",
+    }
+
+
+def _asset_event(row: DataAsset) -> dict:
+    quality = getattr(row, "quality", None)
+    return {
+        "type": "data_asset",
+        "title": row.name,
+        "date": (row.acquisition_end or row.acquisition_start or row.created_at.date()).isoformat(),
+        "location": row.scope_name or row.scope_level,
+        "status": row.status,
+        "severity": getattr(quality, "confidence", ""),
+        "detail": f"{row.asset_type} {row.file_format} asset; {row.feature_count or 'metadata'} feature count.",
+        "source": getattr(quality, "source_name", "") or "AEIS-K data asset",
+    }
+
+
+def _coverage_rows(queryset, date_field: str, scope_field: str = "scope_name") -> list[dict]:
+    rows = []
+    for row in queryset.values(scope_field).annotate(
+        record_count=models_count("id"),
+        latest=models_max(date_field),
+    ).order_by(scope_field):
+        rows.append(
+            {
+                "scope_name": row.get(scope_field) or "Unscoped",
+                "record_count": row["record_count"],
+                "latest_available": row["latest"].isoformat() if row.get("latest") else None,
+            }
+        )
+    return rows
+
+
+def research_context(query) -> dict:
+    county = str(query.get("county") or "").strip()
+    try:
+        limit = max(5, min(100, int(query.get("limit", "40") or 40)))
+    except ValueError as exc:
+        raise DataSourceError("limit must be numeric.") from exc
+    boundaries = _boundary_context(county)
+    scope_name = boundaries["scope_name"] if boundaries["scope"] == "county" else ""
+
+    field_reports = FieldReport.objects.select_related("submitted_by", "verified_by")
+    alerts = Alert.objects.all()
+    reports_qs = IntelligenceReport.objects.all()
+    assets = DataAsset.objects.select_related("quality")
+    monthly = MonthlyClimateObservation.objects.all()
+    metrics = EnvironmentalMetricObservation.objects.all()
+
+    if scope_name:
+        field_reports = field_reports.filter(county_name__iexact=scope_name)
+        alerts = alerts.filter(Q(scope_name__iexact=scope_name) | Q(scope_level="national"))
+        reports_qs = reports_qs.filter(Q(scope_name__iexact=scope_name) | Q(scope_level="national"))
+        assets = assets.filter(Q(scope_name__iexact=scope_name) | Q(scope_level="national"))
+        monthly = monthly.filter(county_name__iexact=scope_name)
+        metrics = metrics.filter(Q(scope_name__iexact=scope_name) | Q(scope_level="national"))
+
+    events = [
+        *[_field_report_event(row) for row in field_reports[:limit]],
+        *[_alert_event(row) for row in alerts[:limit]],
+        *[_report_event(row) for row in reports_qs[:limit]],
+        *[_asset_event(row) for row in assets[:limit]],
+    ]
+    events.sort(key=lambda row: row.get("date") or "", reverse=True)
+
+    subcounty_activity = []
+    if scope_name:
+        report_counts = {
+            row["subcounty_name"] or "Unspecified": row["count"]
+            for row in field_reports.values("subcounty_name").annotate(count=models_count("id"))
+        }
+        for row in boundaries["subcounties"][:80]:
+            subcounty_activity.append(
+                {
+                    **row,
+                    "field_report_count": report_counts.get(row["name"], 0),
+                    "status": "has_field_reports" if report_counts.get(row["name"], 0) else "boundary_ready_source_required",
+                }
+            )
+
+    ward_activity = []
+    if scope_name:
+        report_counts = {
+            row["ward_name"] or "Unspecified": row["count"]
+            for row in field_reports.values("ward_name").annotate(count=models_count("id"))
+        }
+        for row in boundaries["wards"][:120]:
+            ward_activity.append(
+                {
+                    **row,
+                    "field_report_count": report_counts.get(row["name"], 0),
+                    "status": "has_field_reports" if report_counts.get(row["name"], 0) else "boundary_ready_source_required",
+                }
+            )
+
+    latest_month = monthly.order_by("-observation_month").first()
+    latest_metric = metrics.order_by("-period_end").first()
+    return {
+        "scope": boundaries["scope"],
+        "scope_name": boundaries["scope_name"],
+        "scope_code": boundaries["scope_code"],
+        "boundary_summary": boundaries["summary"],
+        "counties": boundaries["counties"],
+        "subcounties": subcounty_activity or boundaries["subcounties"][:80],
+        "wards": ward_activity or boundaries["wards"][:120],
+        "previous_happenings": events[:limit],
+        "coverage": {
+            "field_reports": {
+                "record_count": field_reports.count(),
+                "verified_count": field_reports.filter(verification_status=FieldReport.VerificationStatus.VERIFIED).count(),
+                "latest_available": field_reports.order_by("-observation_date").first().observation_date.isoformat()
+                if field_reports.exists()
+                else None,
+                "by_subcounty": _coverage_rows(field_reports, "observation_date", "subcounty_name")[:40],
+                "by_ward": _coverage_rows(field_reports, "observation_date", "ward_name")[:60],
+            },
+            "alerts": {
+                "record_count": alerts.count(),
+                "open_count": alerts.exclude(status=Alert.Status.RESOLVED).count(),
+                "latest_available": alerts.order_by("-created_at").first().created_at.date().isoformat()
+                if alerts.exists()
+                else None,
+            },
+            "reports": {
+                "record_count": reports_qs.count(),
+                "published_count": reports_qs.filter(status=IntelligenceReport.Status.PUBLISHED).count(),
+                "latest_available": reports_qs.order_by("-updated_at").first().updated_at.date().isoformat()
+                if reports_qs.exists()
+                else None,
+            },
+            "data_assets": {
+                "record_count": assets.count(),
+                "latest_available": assets.order_by("-created_at").first().created_at.date().isoformat()
+                if assets.exists()
+                else None,
+            },
+            "monthly_climate": {
+                "record_count": monthly.count(),
+                "latest_available": latest_month.observation_month.isoformat() if latest_month else None,
+            },
+            "environmental_metrics": {
+                "record_count": metrics.count(),
+                "latest_available": latest_metric.period_end.isoformat() if latest_metric else None,
+            },
+        },
+        "source_note": (
+            "Research context combines official boundary files with AEIS-K alerts, reports, field reports, data assets, "
+            "reviewed monthly climate records, and imported environmental metrics. Empty sub-county or ward records are "
+            "shown as boundary-ready/source-required rather than filled with invented events."
+        ),
+        "generated_at": domain.now_iso(),
+    }
+
+
 def sentinel_2_search(query) -> dict:
     today = date.today()
     start = _parse_date(query.get("start"), today - timedelta(days=3652))
@@ -371,7 +1657,7 @@ def sentinel_2_search(query) -> dict:
     if start > end:
         raise DataSourceError("start must be on or before end.")
     if (end - start).days > MAX_HISTORY_DAYS:
-        raise DataSourceError("One imagery search may cover at most twelve years.")
+        raise DataSourceError("One imagery search may cover at most twenty-two years.")
     county = str(query.get("county") or "").strip()
     feature = domain.find_county(county)
     if not feature:
@@ -562,6 +1848,106 @@ def landsat_latest(query) -> dict:
         "search_start": start.isoformat(),
         "search_end": end.isoformat(),
         "max_cloud": max_cloud,
+        "generated_at": domain.now_iso(),
+    }
+
+
+def _soilgrids_value(layer: dict, depth_label: str = "0-5cm") -> float | None:
+    unit = layer.get("unit_measure") or {}
+    divisor = float(unit.get("d_factor") or 1)
+    if not math.isfinite(divisor) or divisor == 0:
+        divisor = 1
+    for depth in layer.get("depths") or []:
+        if depth.get("label") != depth_label:
+            continue
+        value = (depth.get("values") or {}).get("mean")
+        if value is None:
+            return None
+        try:
+            number = float(value) / divisor
+        except (TypeError, ValueError):
+            return None
+        return number if math.isfinite(number) else None
+    return None
+
+
+def soilgrids_point(query) -> dict:
+    county = str(query.get("county") or "").strip()
+    scope_name = "Custom point"
+    scope_code = ""
+    if county:
+        feature = domain.find_county(county)
+        if not feature:
+            raise DataSourceError("County not found.", 404)
+        latitude, longitude = domain.county_weather_center(feature)
+        scope_name = domain.county_name(feature)
+        scope_code = domain.county_code(feature)
+    else:
+        try:
+            latitude = float(query.get("lat") or query.get("latitude"))
+            longitude = float(query.get("lon") or query.get("longitude"))
+        except (TypeError, ValueError) as exc:
+            raise DataSourceError("Provide a valid county or numeric lat/lon for SoilGrids.") from exc
+
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        raise DataSourceError("SoilGrids latitude/longitude is out of range.")
+
+    params = {
+        "lon": f"{longitude:.6f}",
+        "lat": f"{latitude:.6f}",
+        "property": ["phh2o", "soc"],
+        "depth": str(query.get("depth") or "0-5cm"),
+        "value": "mean",
+    }
+    encoded = urlencode(params, doseq=True)
+    cache_key = f"soilgrids:{hashlib.sha256(encoded.encode()).hexdigest()}"
+    payload = cache.get(cache_key)
+    if payload is None:
+        try:
+            request = Request(
+                f"{SOILGRIDS_PROPERTIES_URL}?{encoded}",
+                headers={"User-Agent": "AEIS-K/1.0 SoilGrids point connector"},
+            )
+            with urlopen(request, timeout=12) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise DataSourceError(f"SoilGrids rejected the request: {detail[:300]}", 502) from exc
+        except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            raise DataSourceError(f"SoilGrids is unavailable: {exc}", 503) from exc
+        cache.set(cache_key, payload, 86400)
+
+    layers = {layer.get("name"): layer for layer in (payload.get("properties") or {}).get("layers") or []}
+    depth = str(query.get("depth") or "0-5cm")
+    ph = _soilgrids_value(layers.get("phh2o") or {}, depth)
+    soc_g_kg = _soilgrids_value(layers.get("soc") or {}, depth)
+    clay_g_kg = _soilgrids_value(layers.get("clay") or {}, depth)
+    sand_g_kg = _soilgrids_value(layers.get("sand") or {}, depth)
+    silt_g_kg = _soilgrids_value(layers.get("silt") or {}, depth)
+    bulk_density = _soilgrids_value(layers.get("bdod") or {}, depth)
+
+    properties = {
+        "soil_ph": round(ph, 2) if ph is not None else None,
+        "soil_organic_carbon_g_kg": round(soc_g_kg, 2) if soc_g_kg is not None else None,
+        "soil_organic_carbon_pct": round(soc_g_kg / 10, 2) if soc_g_kg is not None else None,
+        "clay_g_kg": round(clay_g_kg, 1) if clay_g_kg is not None else None,
+        "sand_g_kg": round(sand_g_kg, 1) if sand_g_kg is not None else None,
+        "silt_g_kg": round(silt_g_kg, 1) if silt_g_kg is not None else None,
+        "bulk_density_cg_cm3": round(bulk_density, 1) if bulk_density is not None else None,
+    }
+    has_values = any(value is not None for value in properties.values())
+    return {
+        "provider": "ISRIC SoilGrids",
+        "source_url": SOILGRIDS_PROPERTIES_URL,
+        "scope": scope_name,
+        "scope_code": scope_code,
+        "latitude": latitude,
+        "longitude": longitude,
+        "depth": depth,
+        "status": "source_backed" if has_values else "no_model_value_at_point",
+        "properties": properties,
+        "raw_layers": list(layers),
+        "method": "SoilGrids point estimate at county centre; not an area-weighted county zonal statistic.",
         "generated_at": domain.now_iso(),
     }
 

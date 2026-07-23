@@ -2,13 +2,20 @@ import json
 import os
 import shutil
 import tempfile
+from datetime import date
 from unittest.mock import MagicMock, patch
 
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
-from aeis_dashboard.models import AEISUser, ProcessingJob, SystemSetting
+from aeis_dashboard.models import (
+    AEISUser,
+    EnvironmentalMetricObservation,
+    MonthlyClimateObservation,
+    ProcessingJob,
+    SystemSetting,
+)
 from aeis_dashboard.services.auth import seed_default_accounts
 from aeis_dashboard.services import domain, jobs
 
@@ -435,6 +442,120 @@ class AEISApiTests(TestCase):
         data = response.json()
         self.assertEqual(data["record_count"], 2)
         self.assertEqual(data["latest_available"], "2025-12-01")
+
+    @patch("aeis_dashboard.services.data_sources.urlopen")
+    def test_monthly_intelligence_populates_county_console_series(self, mocked_urlopen):
+        cache.clear()
+        token = self._ministry_token()
+        payload = {
+            "header": {"fill_value": -999.0},
+            "properties": {
+                "parameter": {
+                    "PRECTOTCORR": {"202401": 2.0, "202402": 3.0, "202501": 4.0},
+                    "T2M": {"202401": 24.0, "202402": 25.0, "202501": 26.0},
+                    "T2M_MAX": {"202401": 29.0, "202402": 30.0, "202501": 31.0},
+                    "T2M_MIN": {"202401": 19.0, "202402": 20.0, "202501": 21.0},
+                    "RH2M": {"202401": 75.0, "202402": 72.0, "202501": 70.0},
+                    "WS2M": {"202401": 2.5, "202402": 2.7, "202501": 3.1},
+                    "ALLSKY_SFC_SW_DWN": {"202401": 18.0, "202402": 18.5, "202501": 19.0},
+                }
+            },
+            "parameters": {
+                "PRECTOTCORR": {"units": "mm/day", "longname": "Precipitation Corrected"},
+                "T2M": {"units": "C", "longname": "Temperature at 2 Meters"},
+            },
+        }
+        mocked_urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(payload).encode("utf-8")
+        response = self.client.get(
+            "/api/data/intelligence/monthly?county=Mombasa&years=2",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["scope"], "county")
+        self.assertEqual(data["record_count"], 3)
+        self.assertEqual(data["records"][0]["rainfall_mm"], 62.0)
+        self.assertEqual(data["console_readiness"]["rainfall"]["status"], "source_backed")
+        self.assertEqual(len(data["county_statistics"]), 1)
+        self.assertEqual(data["county_statistics"][0]["county"], "Mombasa")
+        self.assertEqual(data["county_statistics"][0]["county_code"], "001")
+        self.assertIn("kenya", data["source_note"].lower())
+        self.assertEqual(len(data["six_month_outlook"]), 6)
+
+    def test_monthly_intelligence_prefers_reviewed_local_records(self):
+        cache.clear()
+        token = self._ministry_token()
+        MonthlyClimateObservation.objects.create(
+            source_slug="kenya-meteorological-department",
+            source_name="KMD reviewed monthly county climate export",
+            provider="Kenya Meteorological Department",
+            county_name="Mombasa",
+            county_code="001",
+            observation_month=date(2025, 1, 1),
+            rainfall_mm=123.4,
+            temperature_c=25.1,
+            humidity_pct=72.0,
+            station_count=3,
+            quality_flag="reviewed",
+        )
+        response = self.client.get(
+            "/api/data/intelligence/monthly?county=Mombasa&years=2&source=local",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["provider"], "Reviewed local monthly climate records")
+        self.assertEqual(data["record_count"], 1)
+        self.assertEqual(data["records"][0]["data_mode"], "official_reviewed")
+        self.assertEqual(data["records"][0]["rainfall_mm"], 123.4)
+        self.assertEqual(data["records"][0]["source_slug"], "kenya-meteorological-department")
+        self.assertEqual(data["console_readiness"]["rainfall"]["status"], "official_reviewed")
+        self.assertEqual(data["source_urls"], [])
+        self.assertEqual(data["county_statistics"][0]["status"], "official_reviewed")
+
+        catalog = self.client.get("/api/data/sources").json()
+        kmd = next(source for source in catalog["sources"] if source["slug"] == "kenya-meteorological-department")
+        self.assertEqual(kmd["access"], "connected")
+        self.assertEqual(catalog["summary"]["reviewed_monthly_climate_records"], 1)
+
+    def test_environmental_metrics_return_only_imported_source_backed_records(self):
+        cache.clear()
+        token = self._ministry_token()
+        EnvironmentalMetricObservation.objects.create(
+            source_slug="esa-worldcover",
+            source_name="ESA WorldCover county zonal statistics",
+            provider="European Space Agency",
+            metric_key="cropland_pct",
+            metric_label="Cropland share",
+            category="landuse",
+            unit="%",
+            value=31.4,
+            period_start=date(2021, 1, 1),
+            period_end=date(2021, 12, 31),
+            period_grain="annual",
+            scope_level="county",
+            scope_name="Mombasa",
+            scope_code="001",
+            confidence="high",
+            method="county zonal statistics",
+            quality_flag="reviewed",
+        )
+        response = self.client.get(
+            "/api/data/intelligence/metrics?county=Mombasa&category=landuse&years=10",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["record_count"], 1)
+        self.assertEqual(data["records"][0]["metric_key"], "cropland_pct")
+        self.assertEqual(data["records"][0]["value"], 31.4)
+        self.assertEqual(data["latest_by_category"]["landuse"][0]["source_slug"], "esa-worldcover")
+        self.assertIn("source-backed", data["source_note"])
+
+        catalog = self.client.get("/api/data/sources").json()
+        esa = next(source for source in catalog["sources"] if source["slug"] == "esa-worldcover")
+        self.assertEqual(esa["access"], "connected")
+        self.assertEqual(catalog["summary"]["reviewed_environmental_metric_records"], 1)
 
     @patch("aeis_dashboard.services.data_sources.urlopen")
     def test_sentinel_catalogue_search_returns_source_metadata(self, mocked_urlopen):

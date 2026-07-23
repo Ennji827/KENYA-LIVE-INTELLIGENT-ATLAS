@@ -36,7 +36,7 @@ For permanent automatic startup after Windows logon:
 The control script installs missing requirements, runs migrations, builds the frontend, starts Django/Waitress and the processing worker, prevents duplicate servers, and can register an auto-restarting Windows scheduled task.
 
 - Dashboard and API: `http://127.0.0.1:8000`
-- Runtime database: `.runtime/aeis.sqlite3`
+- Runtime database: `%LOCALAPPDATA%\AEIS-K\aeis-live.sqlite3` by default on Windows, or `AEIS_DB_PATH` when set
 - Runtime cache: `.runtime/cache`
 - Server concurrency: 12 Waitress request threads
 - Durable worker: database-backed AI and report processing outside request threads
@@ -115,6 +115,8 @@ Use the Ministry public-access lock before sharing a public URL.
 The Ministry panel includes a GIS Data Sources workspace:
 
 - NASA POWER climate history: daily data from 1981 to near-real-time and monthly history through the latest completed year
+- Reviewed local monthly climate imports: KMD/KALRO/KNBS-style CSV records can override open fallback data county-by-county and month-by-month
+- Reviewed environmental metric imports: source-backed NDVI, NDWI, LST, water, forest, land-use, roads, and soil metrics can populate Intelligence Hub consoles
 - Copernicus Sentinel-2 catalogue: Level-1C and Level-2A catalogue coverage from June 27, 2015 to present
 - USGS Landsat Collection 2: the latest low-cloud Landsat 8/9 scene is discovered dynamically and shown as a dated map overlay
 - OpenStreetMap is the default open basemap; OpenTopoMap terrain and a reference satellite basemap are also available
@@ -127,6 +129,8 @@ Main endpoints:
 ```text
 GET  /api/data/sources
 GET  /api/data/history/nasa-power
+GET  /api/data/intelligence/monthly
+GET  /api/data/intelligence/metrics
 GET  /api/data/imagery/sentinel-2
 GET  /api/data/imagery/landsat/latest
 GET  /api/data/imagery/landsat/map
@@ -136,11 +140,32 @@ POST /api/data/assets/upload
 
 Historical queries and asset access require an active AEIS-K session. Uploads and API registration require a Ministry session.
 
+Monthly intelligence rule: AEIS-K shows only source-backed values. Reviewed Kenya-local records are preferred when imported; NASA POWER is used only as a real open-source fallback. If NDVI, NDWI, surface-water extent, forest cover, land-use share, road length, or soil properties are not connected, the dashboard must show source-required/proxy labels instead of invented values.
+
+Import reviewed monthly climate CSV records:
+
+```powershell
+python django_backend\manage.py import_monthly_climate C:\path\kmd-monthly.csv --source-slug kenya-meteorological-department --source-name "KMD reviewed monthly county climate export" --provider "Kenya Meteorological Department"
+```
+
+Accepted CSV columns include `county` or `county_code`, `month` or `year` + `month_number`, `rainfall_mm`, `temperature_c`, `temperature_max_c`, `temperature_min_c`, `humidity_pct`, `wind_ms`, `solar_mj_m2_day`, `station_count`, `quality_flag`, and `notes`. Bad counties, bad dates, and impossible ranges are skipped and reported.
+
+Import reviewed environmental metric CSV records:
+
+```powershell
+python django_backend\manage.py import_environmental_metrics C:\path\metrics.csv --source-slug esa-worldcover --source-name "ESA WorldCover county zonal statistics" --provider "European Space Agency"
+```
+
+Accepted environmental metric columns include `county` or `scope_name`, `county_code` or `scope_code`, `metric_key`, `value`, `period_start`, `period_end`, `period_grain`, `source_slug`, `source_name`, `provider`, `confidence`, `method`, `quality_flag`, and `notes`. Supported metric keys include `ndvi`, `ndwi`, `lst_c`, `water_extent_ha`, `water_extent_pct`, `forest_cover_ha`, `forest_cover_pct`, `cropland_pct`, `built_up_pct`, `grassland_pct`, `bare_land_pct`, `tarmac_road_km`, `all_weather_road_km`, `road_density_km_per_100sqkm`, `soil_organic_carbon_pct`, `soil_ph`, and `soil_moisture_pct`.
+
 Example:
 
 ```text
 GET /api/data/history/nasa-power?county=Mombasa&temporal=monthly&start=2016-01-01&end=2026-06-20
 GET /api/data/history/nasa-power?county=Mombasa&temporal=daily&start=2026-01-01&end=2026-06-20
+GET /api/data/intelligence/monthly?county=Mombasa&years=20&source=auto
+GET /api/data/intelligence/monthly?years=20&source=local
+GET /api/data/intelligence/metrics?county=Mombasa&category=landuse&years=20
 GET /api/data/imagery/sentinel-2?county=Mombasa&start=2016-01-01&end=2026-06-20&max_cloud=30
 GET /api/data/imagery/landsat/latest?county=Mombasa&lookback_days=365&max_cloud=35
 ```

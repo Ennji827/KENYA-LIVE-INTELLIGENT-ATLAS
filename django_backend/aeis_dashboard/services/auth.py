@@ -213,8 +213,8 @@ def session_payload(session: AccessSession) -> dict:
         command_center = "AEIS-K National Audit Workspace"
         gps_status = "not_required"
     elif user.role == AEISUser.Role.FARMER:
-        boundary_scope = "own_farm_only"
-        command_center = f"{user.county_name} Farmer Workspace"
+        boundary_scope = "own_field_site_only"
+        command_center = f"{user.county_name} Field Site Workspace"
         gps_status = "demo_remote_access" if demo else "inside_county"
     elif user.role == AEISUser.Role.FIELD_OFFICER:
         boundary_scope = "assigned_county_field"
