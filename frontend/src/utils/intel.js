@@ -34,6 +34,7 @@ function stats(topicId, regions) {
 function childLabel(scope) {
   if (scope.level === "national") return "counties";
   if (scope.level === "county") return "sub-counties";
+  if (scope.level === "subcounty" || scope.level === "ward") return "wards";
   return "areas";
 }
 
@@ -41,6 +42,7 @@ export function scopeLabel(scope) {
   if (scope.level === "national") return "National";
   if (scope.level === "county") return scope.county;
   if (scope.level === "subcounty") return `${scope.subcounty}, ${scope.county}`;
+  if (scope.level === "ward") return `${scope.ward}, ${scope.subcounty}, ${scope.county}`;
   return "National";
 }
 

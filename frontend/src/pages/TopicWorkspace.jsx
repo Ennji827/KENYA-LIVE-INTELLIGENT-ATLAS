@@ -37,7 +37,7 @@ export default function TopicWorkspace({
 }) {
   const topic = getTopic(topicId);
   const [scope, setScope] = useState(
-    initialScope || { level: "national", county: "", subcounty: "" },
+    initialScope || { level: "national", county: "", subcounty: "", ward: "" },
   );
   const [regions, setRegions] = useState([]);
   const [report, setReport] = useState(null);
@@ -84,24 +84,35 @@ export default function TopicWorkspace({
     setReport(buildReport(topicId, scope, regions));
   };
 
-  // The map renders national counties, or the sub-counties of the active county.
-  const mapLevel = scope.level === "national" ? "national" : "county";
+  // The map renders counties, then sub-counties, then wards as the user drills.
+  const mapLevel =
+    scope.level === "national"
+      ? "national"
+      : scope.level === "county"
+        ? "county"
+        : "subcounty";
 
   const handleDrill = (name) => {
     if (scope.level === "national") {
-      setScope({ level: "county", county: name, subcounty: "" });
-    } else {
-      // In a county view, clicking a sub-county focuses it.
-      setScope((s) => ({ ...s, level: "subcounty", subcounty: name }));
+      setScope({ level: "county", county: name, subcounty: "", ward: "" });
+    } else if (scope.level === "county") {
+      setScope((s) => ({ ...s, level: "subcounty", subcounty: name, ward: "" }));
+    } else if (scope.level === "subcounty" || scope.level === "ward") {
+      setScope((s) => ({ ...s, level: "ward", ward: name }));
     }
   };
 
-  const goNational = () => setScope({ level: "national", county: "", subcounty: "" });
+  const goNational = () => setScope({ level: "national", county: "", subcounty: "", ward: "" });
   const goCounty = () =>
-    setScope((s) => ({ level: "county", county: s.county, subcounty: "" }));
+    setScope((s) => ({ level: "county", county: s.county, subcounty: "", ward: "" }));
+  const goSubcounty = () =>
+    setScope((s) => ({ level: "subcounty", county: s.county, subcounty: s.subcounty, ward: "" }));
 
   // Headline figure for the current scope, derived from the visible regions.
   const headline = useMemo(() => {
+    if (scope.level === "ward") {
+      return regionValue(topicId, scope.ward);
+    }
     if (scope.level === "subcounty") {
       return regionValue(topicId, scope.subcounty);
     }
@@ -115,7 +126,7 @@ export default function TopicWorkspace({
   }, [regions]);
 
   const childTier =
-    scope.level === "national" ? "counties" : "sub-counties";
+    scope.level === "national" ? "counties" : scope.level === "county" ? "sub-counties" : "wards";
 
   return (
     <div className="workspace">
@@ -145,7 +156,19 @@ export default function TopicWorkspace({
           {scope.subcounty && (
             <>
               <span className="sep">/</span>
-              <span className="crumb crumb--current">{scope.subcounty}</span>
+              <button
+                className="crumb"
+                onClick={goSubcounty}
+                disabled={scope.level === "subcounty"}
+              >
+                {scope.subcounty}
+              </button>
+            </>
+          )}
+          {scope.ward && (
+            <>
+              <span className="sep">/</span>
+              <span className="crumb crumb--current">{scope.ward}</span>
             </>
           )}
         </nav>
@@ -197,15 +220,18 @@ export default function TopicWorkspace({
             <span className="panel__hint">
               {scope.level === "national"
                 ? "Click a county to drill down"
-                : "Click a sub-county to focus it"}
+                : scope.level === "county"
+                  ? "Click a sub-county to drill down"
+                  : "Click a ward to zoom to it"}
             </span>
           </div>
           <TopicMap
             topicId={topicId}
             level={mapLevel}
             county={scope.county}
+            subcounty={scope.subcounty}
             selectedRegion={
-              scope.level === "subcounty" ? scope.subcounty : null
+              scope.level === "ward" ? scope.ward : null
             }
             onDrill={handleDrill}
             onRegionsLoaded={setRegions}
@@ -222,7 +248,7 @@ export default function TopicWorkspace({
           <div className="rank-list">
             {regions.map((r, i) => {
               const active =
-                scope.subcounty === r.name || scope.county === r.name;
+                scope.ward === r.name || scope.subcounty === r.name || scope.county === r.name;
               return (
                 <button
                   key={r.name}
@@ -253,7 +279,9 @@ export default function TopicWorkspace({
             <span className="panel__hint">
               {scope.level === "national"
                 ? "Click a name to drill into that county"
-                : "Click a name to zoom to that sub-county"}
+                : scope.level === "county"
+                  ? "Click a name to drill into that sub-county"
+                  : "Click a name to zoom to that ward"}
             </span>
           </div>
           <div className="chart-wrap">

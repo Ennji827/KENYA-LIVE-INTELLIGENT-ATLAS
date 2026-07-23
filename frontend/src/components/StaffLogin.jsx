@@ -4,10 +4,10 @@ import { saveAuthSession } from "./AuthGateway";
 
 // Government / staff sign-in. Unlike the public portal (name/email/Google), staff
 // authenticate against role-based accounts:
-//   • National / Ministry — email or username + password (ministry · analyst · auditor)
-//   • County officer       — county + credentials + GPS geofence (or remote demo)
-// A ministry session unlocks the full report workflow (generate · review · approve
-// · publish); analyst and county sessions can generate and review.
+//   â€¢ National / Ministry â€” email or username + password (ministry Â· analyst Â· auditor)
+//   â€¢ County officer       â€” county + credentials + GPS geofence (or remote demo)
+// A ministry session unlocks the full report workflow (generate Â· review Â· approve
+// Â· publish); analyst and county sessions can generate and review.
 export default function StaffLogin({ onAuthenticated, onBack, onPublic }) {
   const [tier, setTier] = useState("national"); // national | county
 
@@ -72,7 +72,7 @@ export default function StaffLogin({ onAuthenticated, onBack, onPublic }) {
   };
 
   const captureGps = () => {
-    setCGpsMsg("Requesting location…");
+    setCGpsMsg("Requesting locationâ€¦");
     if (!navigator.geolocation) {
       setCGpsMsg("This browser does not expose GPS. Use remote demo access instead.");
       return;
@@ -130,7 +130,7 @@ export default function StaffLogin({ onAuthenticated, onBack, onPublic }) {
         )}
 
         <h2 className="auth-heading">Government access</h2>
-        <p className="auth-sub">Sign in with your AEIS-K staff account</p>
+        <p className="auth-sub">Sign in with your K-L-I-A staff account</p>
 
         <div className="staff-tabs" role="tablist">
           <button
@@ -153,20 +153,20 @@ export default function StaffLogin({ onAuthenticated, onBack, onPublic }) {
           </button>
         </div>
 
-        {/* ── National / Ministry ── */}
+        {/* â”€â”€ National / Ministry â”€â”€ */}
         {tier === "national" && (
           <form onSubmit={handleNational} className="auth-form">
             <div className="auth-field">
               <label htmlFor="n-id">Email or username</label>
-              <input id="n-id" type="text" value={nId} onChange={(e) => setNId(e.target.value)} placeholder="ministry.command@aeis-k.local" autoComplete="username" required />
+              <input id="n-id" type="text" value={nId} onChange={(e) => setNId(e.target.value)} placeholder="ministry.command@k-l-i-a.local" autoComplete="username" required />
             </div>
             <div className="auth-field">
               <label htmlFor="n-pw">Password</label>
-              <input id="n-pw" type="password" value={nPw} onChange={(e) => setNPw(e.target.value)} placeholder="••••••••" autoComplete="current-password" required />
+              <input id="n-pw" type="password" value={nPw} onChange={(e) => setNPw(e.target.value)} placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" autoComplete="current-password" required />
             </div>
             {nError && <p className="auth-msg error">{nError}</p>}
             <button type="submit" className="auth-btn" disabled={nBusy}>
-              {nBusy ? "Signing in…" : "Sign in"}
+              {nBusy ? "Signing inâ€¦" : "Sign in"}
             </button>
 
             {nationalDemo.length > 0 && (
@@ -184,13 +184,13 @@ export default function StaffLogin({ onAuthenticated, onBack, onPublic }) {
           </form>
         )}
 
-        {/* ── County officer ── */}
+        {/* â”€â”€ County officer â”€â”€ */}
         {tier === "county" && (
           <form onSubmit={handleCounty} className="auth-form">
             <div className="auth-field">
               <label htmlFor="c-county">County</label>
               <select id="c-county" value={cCode} onChange={(e) => onSelectCounty(e.target.value)} required>
-                <option value="">— select county —</option>
+                <option value="">â€” select county â€”</option>
                 {(model?.county_accounts || []).map((a) => (
                   <option key={a.county_code} value={a.county_code}>{a.county}</option>
                 ))}
@@ -202,13 +202,13 @@ export default function StaffLogin({ onAuthenticated, onBack, onPublic }) {
             </div>
             <div className="auth-field">
               <label htmlFor="c-pw">Password</label>
-              <input id="c-pw" type="password" value={cPw} onChange={(e) => setCPw(e.target.value)} placeholder="••••••••" autoComplete="current-password" required />
+              <input id="c-pw" type="password" value={cPw} onChange={(e) => setCPw(e.target.value)} placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" autoComplete="current-password" required />
             </div>
 
             <div className="auth-field">
               <label>Location check</label>
               <button type="button" className="btn btn--ghost" onClick={captureGps} disabled={cDemo}>
-                {cGps ? "✓ Location captured" : "Use my GPS location"}
+                {cGps ? "âœ“ Location captured" : "Use my GPS location"}
               </button>
               {cGpsMsg && !cDemo && <p className="staff-gps-msg">{cGpsMsg}</p>}
               <label className="staff-check">
@@ -219,7 +219,7 @@ export default function StaffLogin({ onAuthenticated, onBack, onPublic }) {
 
             {cError && <p className="auth-msg error">{cError}</p>}
             <button type="submit" className="auth-btn" disabled={cBusy}>
-              {cBusy ? "Signing in…" : "Sign in"}
+              {cBusy ? "Signing inâ€¦" : "Sign in"}
             </button>
           </form>
         )}

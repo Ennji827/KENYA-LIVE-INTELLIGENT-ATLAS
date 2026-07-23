@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { getTopic } from "../data/topics";
-import { listCounties, listSubcounties } from "../utils/geo";
+import { listCounties, listSubcounties, listWards } from "../utils/geo";
 
 // "Area of interest" chooser shown right after a topic is opened.
 // Lets the user start at National level or focus on a specific
@@ -11,33 +11,57 @@ export default function AreaSelect({ topicId, onConfirm, onCancel }) {
   const [mode, setMode] = useState("national"); // "national" | "county"
   const [county, setCounty] = useState("");
   const [subcounty, setSubcounty] = useState("");
+  const [ward, setWard] = useState("");
   const [subcounties, setSubcounties] = useState([]);
+  const [wards, setWards] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
     if (!county) {
       setSubcounties([]);
       setSubcounty("");
+      setWards([]);
+      setWard("");
       return;
     }
     listSubcounties(county).then((list) => {
       if (!cancelled) setSubcounties(list);
     });
     setSubcounty("");
+    setWards([]);
+    setWard("");
     return () => {
       cancelled = true;
     };
   }, [county]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!subcounty) {
+      setWards([]);
+      setWard("");
+      return;
+    }
+    listWards(county, subcounty).then((list) => {
+      if (!cancelled) setWards(list);
+    });
+    setWard("");
+    return () => {
+      cancelled = true;
+    };
+  }, [county, subcounty]);
+
   const canStart = mode === "national" || Boolean(county);
 
   const start = () => {
     if (mode === "national") {
-      onConfirm({ level: "national", county: "", subcounty: "" });
+      onConfirm({ level: "national", county: "", subcounty: "", ward: "" });
+    } else if (ward) {
+      onConfirm({ level: "ward", county, subcounty, ward });
     } else if (subcounty) {
-      onConfirm({ level: "subcounty", county, subcounty });
+      onConfirm({ level: "subcounty", county, subcounty, ward: "" });
     } else {
-      onConfirm({ level: "county", county, subcounty: "" });
+      onConfirm({ level: "county", county, subcounty: "", ward: "" });
     }
   };
 
@@ -112,6 +136,24 @@ export default function AreaSelect({ topicId, onConfirm, onCancel }) {
               {subcounties.map((s) => (
                 <option key={s} value={s}>
                   {s}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>Ward (optional)</span>
+            <select
+              value={ward}
+              onChange={(e) => setWard(e.target.value)}
+              disabled={!subcounty || wards.length === 0}
+            >
+              <option value="">
+                {subcounty ? "All wards" : "Select a sub-county first"}
+              </option>
+              {wards.map((w) => (
+                <option key={w} value={w}>
+                  {w}
                 </option>
               ))}
             </select>

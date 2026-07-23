@@ -4,6 +4,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { regionValue, rampColor, formatValue } from "../data/topics";
 import { loadGeo, countiesUrl, subcountiesUrl } from "../utils/geo";
+import { fetchBoundaryWards } from "../utils/apiClient";
 
 // Kenya national bounds as a sensible default view.
 const KENYA_CENTER = [0.23, 37.9];
@@ -67,8 +68,9 @@ function FitBounds({ geojson, selectedRegion, nameKey }) {
 
 export default function TopicMap({
   topicId,
-  level, // "national" | "county"
+  level, // "national" | "county" | "subcounty"
   county, // parent county name when level === "county"
+  subcounty, // parent sub-county name when level === "subcounty"
   selectedRegion,
   onDrill,
   onRegionsLoaded,
@@ -84,7 +86,8 @@ export default function TopicMap({
   const onRegionsLoadedRef = useRef(onRegionsLoaded);
   onRegionsLoadedRef.current = onRegionsLoaded;
 
-  const nameKey = level === "national" ? "ADM1_EN" : "ADM2_EN";
+  const nameKey =
+    level === "national" ? "ADM1_EN" : level === "county" ? "ADM2_EN" : "ADM3_EN";
 
   // Load the national county outline once; it underlays every drill level.
   useEffect(() => {
@@ -113,15 +116,25 @@ export default function TopicMap({
     setGeojson(null);
     setError(null);
 
-    const url = level === "national" ? countiesUrl() : subcountiesUrl();
+    const source =
+      level === "subcounty"
+        ? fetchBoundaryWards({ county, subcounty })
+        : loadGeo(level === "national" ? countiesUrl() : subcountiesUrl());
 
-    loadGeo(url)
+    source
       .then((data) => {
         if (cancelled) return;
         let features = data.features;
         if (level === "county") {
           features = features.filter(
             (f) => f.properties?.ADM1_EN === county,
+          );
+        }
+        if (level === "subcounty") {
+          features = features.filter(
+            (f) =>
+              (!county || f.properties?.ADM1_EN === county) &&
+              (!subcounty || f.properties?.ADM2_EN === subcounty),
           );
         }
         const filtered = { type: "FeatureCollection", features };
@@ -144,7 +157,7 @@ export default function TopicMap({
       cancelled = true;
     };
     // liveValues included so regions recompute when live data arrives.
-  }, [topicId, level, county, nameKey, liveValues]);
+  }, [topicId, level, county, subcounty, nameKey, liveValues]);
 
   // Colour scale bounds for the currently visible features.
   const [min, max] = useMemo(() => {
@@ -160,11 +173,13 @@ export default function TopicMap({
     const name = feature.properties?.[nameKey];
     const value = valueFor(name);
     const isSelected = selectedRegion && name === selectedRegion;
+    const imageryVisible = baseLayer === "hybrid" || baseLayer === "satellite";
     return {
       fillColor: rampColor(topicId, value, min, max),
-      weight: isSelected ? 3 : 1,
-      color: isSelected ? "#0f172a" : "#e2e8f0",
-      fillOpacity: 0.6,
+      weight: isSelected ? 3 : 1.4,
+      color: isSelected ? "#0f172a" : "#f8fafc",
+      fillOpacity: imageryVisible ? (isSelected ? 0.38 : 0.26) : (isSelected ? 0.52 : 0.42),
+      opacity: imageryVisible ? 0.92 : 0.8,
       dashArray: isSelected ? "" : "0",
     };
   };
@@ -231,7 +246,7 @@ export default function TopicMap({
         {geojson && (
           <>
             <GeoJSON
-              key={`${topicId}:${level}:${county || "national"}:${selectedRegion || ""}`}
+              key={`${topicId}:${level}:${county || "national"}:${subcounty || ""}:${selectedRegion || ""}`}
               data={geojson}
               style={styleFeature}
               onEachFeature={onEachFeature}

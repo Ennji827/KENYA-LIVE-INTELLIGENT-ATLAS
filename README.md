@@ -1,4 +1,4 @@
-# AEIS-K Intelligence Dashboard
+# K-L-I-A Intelligence Dashboard
 
 Agro-Environmental Intelligence System for Kenya, powered by one Django backend and a React/Leaflet frontend.
 
@@ -10,7 +10,7 @@ Agro-Environmental Intelligence System for Kenya, powered by one Django backend 
 - Live Open-Meteo forecasts
 - NASA POWER climate history, Sentinel-2 search, and Landsat 8/9 overlays
 - Validated GIS uploads with CRS, duplicate, coverage, confidence, and processing indicators
-- AEIS-K Intelligence Assistant with evidence, confidence, missing-data, and explainability sections
+- K-L-I-A Intelligence Assistant with evidence, confidence, missing-data, and explainability sections
 - National/county report generation, preview, approval workflow, audit trail, and PDF/CSV/XLSX/GeoJSON exports
 - Ministry user management for analyst, county, field officer, farmer, and auditor accounts
 - Field-report submission, offline device drafts, county verification, and role-scoped access
@@ -19,7 +19,7 @@ Agro-Environmental Intelligence System for Kenya, powered by one Django backend 
 - Optional Google Earth Engine raster tile configuration
 - Source-required safeguards for analytics that do not yet have verified data
 
-AEIS-K does not generate official NDVI, NDWI, NDBI, land-cover, farmer-registry, rainfall-history, or crop-risk values without connected sources.
+K-L-I-A does not generate official NDVI, NDWI, NDBI, land-cover, farmer-registry, rainfall-history, or crop-risk values without connected sources.
 
 ## Start
 
@@ -36,7 +36,7 @@ For permanent automatic startup after Windows logon:
 The control script installs missing requirements, runs migrations, builds the frontend, starts Django/Waitress and the processing worker, prevents duplicate servers, and can register an auto-restarting Windows scheduled task.
 
 - Dashboard and API: `http://127.0.0.1:8000`
-- Runtime database: `%LOCALAPPDATA%\AEIS-K\aeis-live.sqlite3` by default on Windows, or `AEIS_DB_PATH` when set
+- Runtime database: `%LOCALAPPDATA%\K-L-I-A\klia-live.sqlite3` by default on Windows, or `AEIS_DB_PATH` when set
 - Runtime cache: `.runtime/cache`
 - Server concurrency: 12 Waitress request threads
 - Durable worker: database-backed AI and report processing outside request threads
@@ -74,7 +74,7 @@ Control commands:
 .\aeis.ps1 uninstall
 ```
 
-Running `npm run dev` from the `frontend` directory is now duplicate-safe. If port 5173 already belongs to AEIS-K, it reports the existing URL instead of failing or starting on another port.
+Running `npm run dev` from the `frontend` directory is now duplicate-safe. If port 5173 already belongs to K-L-I-A, it reports the existing URL instead of failing or starting on another port.
 
 ## Configuration
 
@@ -138,9 +138,9 @@ GET  /api/data/assets
 POST /api/data/assets/upload
 ```
 
-Historical queries and asset access require an active AEIS-K session. Uploads and API registration require a Ministry session.
+Historical queries and asset access require an active K-L-I-A session. Uploads and API registration require a Ministry session.
 
-Monthly intelligence rule: AEIS-K shows only source-backed values. Reviewed Kenya-local records are preferred when imported; NASA POWER is used only as a real open-source fallback. If NDVI, NDWI, surface-water extent, forest cover, land-use share, road length, or soil properties are not connected, the dashboard must show source-required/proxy labels instead of invented values.
+Monthly intelligence rule: K-L-I-A shows only source-backed values. Reviewed Kenya-local records are preferred when imported; NASA POWER is used only as a real open-source fallback. If NDVI, NDWI, surface-water extent, forest cover, land-use share, road length, or soil properties are not connected, the dashboard must show source-required/proxy labels instead of invented values.
 
 Import reviewed monthly climate CSV records:
 

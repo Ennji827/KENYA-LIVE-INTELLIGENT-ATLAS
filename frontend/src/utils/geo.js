@@ -3,9 +3,10 @@
 // resolved once per URL.
 
 import { kenyaCountyNames } from "../data/kenyaCountyCatalog";
+import { getApiBase } from "./api";
 
 const COUNTIES_URL = "/data/counties.geojson";
-const SUBCOUNTIES_URL = "/data/sub_Counties.geojson";
+const SUBCOUNTIES_URL = "/data/sub_counties.geojson";
 
 const cache = new Map();
 
@@ -39,6 +40,21 @@ export async function listSubcounties(county) {
   return data.features
     .filter((f) => f.properties?.ADM1_EN === county)
     .map((f) => f.properties?.ADM2_EN)
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+// Ward names for one sub-county, enriched by the Django boundary hierarchy.
+export async function listWards(county, subcounty) {
+  if (!subcounty) return [];
+  const params = new URLSearchParams();
+  if (county) params.set("county", county);
+  params.set("subcounty", subcounty);
+  const response = await fetch(`${getApiBase()}/api/boundary/wards?${params}`);
+  if (!response.ok) throw new Error("Failed to load wards");
+  const data = await response.json();
+  return (data.features || [])
+    .map((f) => f.properties?.ADM3_EN || f.properties?.shapeName)
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
 }
