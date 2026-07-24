@@ -78,7 +78,7 @@ export default function LandingPage({
       {/* ── Hero copy ── */}
       <section className="lp-hero">
         <div className="lp-hero-inner">
-          <div className="lp-badge">National Geospatial Intelligence</div>
+          <div className="lp-badge">National Geospatial and Resource Intelligence</div>
           <h1 className="lp-hero-title">
             Kenya's National<br />
             <span className="lp-hero-accent">Intelligence Platform</span>
@@ -150,10 +150,10 @@ export default function LandingPage({
       {/* ── Explore topics ── */}
       <section className="lp-topics">
         <div className="lp-section-inner">
-          <h2 className="lp-section-title">Explore the intelligence topics</h2>
+          <h2 className="lp-section-title">Explore Resource intelligence topics</h2>
           <p className="lp-section-sub">
-            Eight critical topics, each mapped from national down to sub-county level.
-            Pick one to drill in, generate reports, and ask the model for insights.
+            Critical topics, each mapped from national down to sub-county level.
+            Select a topic and generate reports, and ask the model for insights.
           </p>
           <div className="lp-topics-grid">
             {TOPICS.map((topic) => (

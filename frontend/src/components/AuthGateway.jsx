@@ -68,7 +68,7 @@ function useGoogleGis(onToken) {
   return { ready, prompt, enabled: !!clientId };
 }
 
-export default function AuthGateway({ onAuthenticated, initialView = "signin", onBack, onStaff }) {
+export default function AuthGateway({ onAuthenticated, initialView = "signin", onBack }) {
   const [view, setView] = useState(initialView); // signin | register | forgot
 
   // Sign-in fields
@@ -145,26 +145,14 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
     e.preventDefault();
     setSiError(""); setSiBusy(true);
     try {
-      const base = getApiBase();
-      const identifier = siEmail.trim();
-      const publicResponse = await fetch(`${base}/api/auth/login`, {
+      const r = await fetch(`${getApiBase()}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: identifier, password: siPassword }),
+        body: JSON.stringify({ email: siEmail.trim(), password: siPassword }),
       });
-
-      let payload = await publicResponse.json();
-      if (publicResponse.ok) { finish({ ...payload, auth_mode: "public" }); return; }
-
-      const nationalResponse = await fetch(`${base}/api/auth/national-login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: identifier, email: identifier, password: siPassword }),
-      });
-      payload = await nationalResponse.json();
-      if (nationalResponse.ok) { finish({ ...payload, auth_mode: payload.role || "national" }); return; }
-
-      setSiError(payload.error || "Invalid email, username, or password.");
+      const payload = await r.json();
+      if (r.ok) { finish({ ...payload, auth_mode: "public" }); return; }
+      setSiError(payload.error || "Invalid email or password.");
     } catch (e) { setSiError(e.message || "Sign in failed."); }
     setSiBusy(false);
   };
@@ -249,8 +237,8 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
 
             <form onSubmit={handleSignIn} className="auth-form">
               <div className="auth-field">
-                <label htmlFor="si-email">Email address or ministry username</label>
-                <input id="si-email" type="text" value={siEmail} onChange={(e) => setSiEmail(e.target.value)} placeholder="you@example.com or ministry_command" autoComplete="username" required />
+                <label htmlFor="si-email">Email address</label>
+                <input id="si-email" type="email" value={siEmail} onChange={(e) => setSiEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" required />
               </div>
               <div className="auth-field">
                 <label htmlFor="si-pw">Password</label>
@@ -269,11 +257,6 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
               Don't have an account?{" "}
               <button type="button" className="auth-link" onClick={() => setView("register")}>Create account</button>
             </p>
-            {onStaff && (
-              <p className="auth-switch">
-                <button type="button" className="auth-link" onClick={onStaff}>Government / staff access →</button>
-              </p>
-            )}
           </>
         )}
 

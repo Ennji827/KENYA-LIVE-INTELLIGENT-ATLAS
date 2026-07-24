@@ -206,13 +206,7 @@ export const createUser = (body) => request("/api/users", { method: "POST", body
 export const updateUser = (userId, body) =>
   request(`/api/users/${userId}`, { method: "PATCH", body });
 
-// ── Staff authentication & governance ────────────────────────────
-export const countyLogin = (body) =>
-  request("/api/auth/county-login", { method: "POST", body });
-export const nationalLogin = (body) =>
-  request("/api/auth/national-login", { method: "POST", body });
-export const ministryLogin = (body) =>
-  request("/api/auth/ministry-login", { method: "POST", body });
+// ── Session & governance ─────────────────────────────────────────
 export const validateSession = (body) =>
   request("/api/auth/validate-session", { method: "POST", body });
 export const logout = (body) => request("/api/auth/logout", { method: "POST", body });

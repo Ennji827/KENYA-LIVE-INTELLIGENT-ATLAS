@@ -6,7 +6,6 @@ import ReportsWorkspace from "./pages/ReportsWorkspace";
 import LandingPage from "./pages/LandingPage";
 import SiteHeader from "./components/SiteHeader";
 import AuthGateway, { readAuthSession, clearAuthSession } from "./components/AuthGateway";
-import StaffLogin from "./components/StaffLogin";
 // Shared tokens + glassmorphism + auth/KSA styles, then the app UI.
 import "./styles/theme.css";
 import "./styles/intel.css";
@@ -97,24 +96,12 @@ export default function AppIntel() {
         </div>
       );
     }
-    if (authScreen === "staff") {
-      return (
-        <div className="intel-app">
-          <StaffLogin
-            onAuthenticated={handleAuthenticated}
-            onBack={() => { setAuthScreen("landing"); setPendingTopic(null); }}
-            onPublic={() => setAuthScreen("signin")}
-          />
-        </div>
-      );
-    }
     return (
       <div className="intel-app">
         <AuthGateway
           initialView={authScreen}
           onAuthenticated={handleAuthenticated}
           onBack={() => { setAuthScreen("landing"); setPendingTopic(null); }}
-          onStaff={() => setAuthScreen("staff")}
         />
       </div>
     );

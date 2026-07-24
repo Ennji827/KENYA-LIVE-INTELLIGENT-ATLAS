@@ -562,24 +562,6 @@ def auth_audit_log(request: HttpRequest) -> JsonResponse:
 
 @csrf_exempt
 @require_http_methods(["POST", "OPTIONS"])
-def auth_county_login(request: HttpRequest) -> JsonResponse:
-    if request.method == "OPTIONS":
-        return api_json({"status": "ok"})
-    status, result = auth.authenticate_county_login(request_json(request))
-    return api_json(result, status=status)
-
-
-@csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
-def auth_national_login(request: HttpRequest) -> JsonResponse:
-    if request.method == "OPTIONS":
-        return api_json({"status": "ok"})
-    status, result = auth.authenticate_national_login(request_json(request))
-    return api_json(result, status=status)
-
-
-@csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
 def auth_validate_session(request: HttpRequest) -> JsonResponse:
     if request.method == "OPTIONS":
         return api_json({"status": "ok"})

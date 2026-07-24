@@ -18,10 +18,13 @@ from django.core.cache import cache
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = PROJECT_ROOT / "frontend" / "public" / "data"
 SESSION_SECONDS = 8 * 60 * 60
-DEFAULT_COUNTY_PASSWORD = "county123"
-DEFAULT_MINISTRY_PASSWORD = "ministry123"
-DEFAULT_ANALYST_PASSWORD = "analyst123"
-DEFAULT_AUDITOR_PASSWORD = "auditor123"
+
+# Demo/seed passwords. Overridable via environment so deployments can set real
+# credentials without touching code; the literals remain as local-dev fallbacks.
+DEFAULT_COUNTY_PASSWORD = os.environ.get("AEIS_COUNTY_PASSWORD", "county123").strip() or "county123"
+DEFAULT_MINISTRY_PASSWORD = os.environ.get("AEIS_MINISTRY_PASSWORD", "ministry123").strip() or "ministry123"
+DEFAULT_ANALYST_PASSWORD = os.environ.get("AEIS_ANALYST_PASSWORD", "analyst123").strip() or "analyst123"
+DEFAULT_AUDITOR_PASSWORD = os.environ.get("AEIS_AUDITOR_PASSWORD", "auditor123").strip() or "auditor123"
 
 
 def env_flag(name: str, default: bool = False) -> bool:
