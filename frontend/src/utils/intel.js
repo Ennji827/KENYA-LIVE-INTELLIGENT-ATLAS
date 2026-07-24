@@ -34,13 +34,16 @@ function stats(topicId, regions) {
 function childLabel(scope) {
   if (scope.level === "national") return "counties";
   if (scope.level === "county") return "sub-counties";
-  return "areas";
+  // At sub-county and ward level the child regions in view are wards.
+  return "wards";
 }
 
 export function scopeLabel(scope) {
   if (scope.level === "national") return "National";
   if (scope.level === "county") return scope.county;
   if (scope.level === "subcounty") return `${scope.subcounty}, ${scope.county}`;
+  if (scope.level === "ward")
+    return `${scope.ward}, ${scope.subcounty}, ${scope.county}`;
   return "National";
 }
 

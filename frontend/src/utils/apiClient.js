@@ -122,6 +122,16 @@ export const fetchGeeLayers = () => request("/api/gee/layers");
 export const fetchOsmMetric = (topic, county) =>
   request(`/api/osm/metric/${enc(topic)}`, { query: { county } });
 
+// ── Live topic metrics from Google Earth Engine ───────────────────
+// Zonal statistics + a raster tile URL for the child regions of the current
+// scope (forests / farmland / water_bodies / rainfall / weather).
+export const fetchGeeMetric = (topic, { level, county, subcounty } = {}) =>
+  request(`/api/gee/metric/${enc(topic)}`, {
+    query: { level, county, subcounty },
+  });
+
+export const fetchGeeStatus = () => request("/api/gee/status");
+
 // ── Intelligence ─────────────────────────────────────────────────
 export const fetchIntelligenceStatus = () => request("/api/intelligence/status"); // protected
 export const fetchIntelligenceInsights = (limit = 20) =>

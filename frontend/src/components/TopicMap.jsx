@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, GeoJSON, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { regionValue, rampColor, formatValue } from "../data/topics";
-import { loadGeo, countiesUrl, subcountiesUrl } from "../utils/geo";
+import { loadGeo, countiesUrl, subcountiesUrl, wardsUrl } from "../utils/geo";
 
 // Kenya national bounds as a sensible default view.
 const KENYA_CENTER = [0.23, 37.9];
@@ -67,13 +67,19 @@ function FitBounds({ geojson, selectedRegion, nameKey }) {
 
 export default function TopicMap({
   topicId,
-  level, // "national" | "county"
-  county, // parent county name when level === "county"
+  level, // "national" | "county" | "subcounty"
+  county, // parent county name when level === "county" or "subcounty"
+  subcounty, // parent sub-county name when level === "subcounty" (renders wards)
   selectedRegion,
   onDrill,
   onRegionsLoaded,
   liveValues, // optional { [regionName]: number } overriding scaffolded values
+  overlayTile, // optional { url, opacity, unit } Earth Engine raster overlay
 }) {
+  // The GEE raster underlays the choropleth (tiles sit below the vector pane),
+  // so region colours + tooltips stay on top and clickable. Toggle to compare
+  // the smooth per-pixel distribution against the per-region aggregate.
+  const [showOverlay, setShowOverlay] = useState(true);
   const [geojson, setGeojson] = useState(null);
   // The full set of county boundaries, kept as a persistent context outline so
   // the national extent stays visible even when drilled into a single county.
@@ -84,7 +90,12 @@ export default function TopicMap({
   const onRegionsLoadedRef = useRef(onRegionsLoaded);
   onRegionsLoadedRef.current = onRegionsLoaded;
 
-  const nameKey = level === "national" ? "ADM1_EN" : "ADM2_EN";
+  const nameKey =
+    level === "national"
+      ? "ADM1_EN"
+      : level === "county"
+      ? "ADM2_EN"
+      : "ADM3_EN"; // subcounty level renders wards
 
   // Load the national county outline once; it underlays every drill level.
   useEffect(() => {
@@ -113,7 +124,12 @@ export default function TopicMap({
     setGeojson(null);
     setError(null);
 
-    const url = level === "national" ? countiesUrl() : subcountiesUrl();
+    const url =
+      level === "national"
+        ? countiesUrl()
+        : level === "county"
+        ? subcountiesUrl()
+        : wardsUrl();
 
     loadGeo(url)
       .then((data) => {
@@ -122,6 +138,10 @@ export default function TopicMap({
         if (level === "county") {
           features = features.filter(
             (f) => f.properties?.ADM1_EN === county,
+          );
+        } else if (level === "subcounty") {
+          features = features.filter(
+            (f) => f.properties?.ADM2_EN === subcounty,
           );
         }
         const filtered = { type: "FeatureCollection", features };
@@ -144,7 +164,7 @@ export default function TopicMap({
       cancelled = true;
     };
     // liveValues included so regions recompute when live data arrives.
-  }, [topicId, level, county, nameKey, liveValues]);
+  }, [topicId, level, county, subcounty, nameKey, liveValues]);
 
   // Colour scale bounds for the currently visible features.
   const [min, max] = useMemo(() => {
@@ -197,6 +217,17 @@ export default function TopicMap({
             {BASE_LAYERS[key].name}
           </button>
         ))}
+        {overlayTile?.url && (
+          <button
+            type="button"
+            className={`topic-map__layer-btn${showOverlay ? " is-active" : ""}`}
+            onClick={() => setShowOverlay((v) => !v)}
+            aria-pressed={showOverlay}
+            title="Google Earth Engine raster layer"
+          >
+            GEE layer
+          </button>
+        )}
       </div>
       <MapContainer
         center={KENYA_CENTER}
@@ -211,6 +242,17 @@ export default function TopicMap({
           attribution={base.attribution}
           maxZoom={20}
         />
+        {/* Earth Engine raster overlay: rendered in the tile pane (below the
+            vector choropleth), so region fills and tooltips remain on top. */}
+        {overlayTile?.url && showOverlay && (
+          <TileLayer
+            key={overlayTile.url}
+            url={overlayTile.url}
+            opacity={overlayTile.opacity ?? 0.7}
+            attribution="&copy; Google Earth Engine"
+            zIndex={250}
+          />
+        )}
         {/* Persistent national county outline: rendered first (underneath) and
             non-interactive, so drilling into one county never hides the rest of
             the country's boundaries. Skipped at national level, where the
@@ -231,7 +273,7 @@ export default function TopicMap({
         {geojson && (
           <>
             <GeoJSON
-              key={`${topicId}:${level}:${county || "national"}:${selectedRegion || ""}`}
+              key={`${topicId}:${level}:${county || "national"}:${subcounty || ""}:${selectedRegion || ""}`}
               data={geojson}
               style={styleFeature}
               onEachFeature={onEachFeature}

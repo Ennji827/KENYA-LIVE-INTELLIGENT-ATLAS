@@ -21,10 +21,20 @@ import {
   SOURCE_STATUS_LABEL,
 } from "../data/topics";
 import { buildReport, reportToCsv, downloadText, scopeLabel } from "../utils/intel";
-import { fetchOsmMetric } from "../utils/apiClient";
+import { fetchOsmMetric, fetchGeeMetric } from "../utils/apiClient";
 
 // Topics backed by a live OpenStreetMap feed (per-county, national scope).
-const OSM_TOPICS = new Set(["roads", "forests", "water_bodies"]);
+const OSM_TOPICS = new Set(["roads"]);
+
+// Topics backed by Google Earth Engine zonal statistics + raster tiles. These
+// work at every drill level (national → county → sub-county → ward).
+const GEE_TOPICS = new Set([
+  "forests",
+  "water_bodies",
+  "farmland",
+  "rainfall",
+  "weather",
+]);
 
 // The drill-down workspace for one topic: map + ranked regions + charts +
 // reports + AI insights, navigable National -> County -> Sub-county.
@@ -37,7 +47,7 @@ export default function TopicWorkspace({
 }) {
   const topic = getTopic(topicId);
   const [scope, setScope] = useState(
-    initialScope || { level: "national", county: "", subcounty: "" },
+    initialScope || { level: "national", county: "", subcounty: "", ward: "" },
   );
   const [regions, setRegions] = useState([]);
   const [report, setReport] = useState(null);
@@ -45,36 +55,77 @@ export default function TopicWorkspace({
   // "use scaffolding". `live` flags that at least one real value arrived.
   const [liveValues, setLiveValues] = useState(null);
   const [liveState, setLiveState] = useState("idle"); // idle | loading | live | error
+  const [liveSource, setLiveSource] = useState(null); // "OpenStreetMap" | "Google Earth Engine"
+  const [geeTile, setGeeTile] = useState(null); // { url, opacity, unit } raster overlay
 
-  // Fetch live values only for supported topics at national scope. County/
-  // sub-county drill-downs stay on scaffolding for now.
+  // Fetch live values for the current scope. GEE topics resolve at every drill
+  // level (national → county → sub-county → ward) and also return a raster tile;
+  // the OSM roads feed is national-only. Everything else stays on scaffolding.
+  // Null/empty responses (incl. an unconfigured provider) fall back cleanly.
   useEffect(() => {
-    if (!OSM_TOPICS.has(topicId) || scope.level !== "national") {
-      setLiveValues(null);
-      setLiveState("idle");
-      return;
-    }
     let cancelled = false;
-    setLiveState("loading");
-    fetchOsmMetric(topicId)
-      .then((data) => {
-        if (cancelled) return;
-        const map = {};
-        (data.regions || []).forEach((r) => {
-          if (r?.name && typeof r.value === "number") map[r.name] = r.value;
-        });
-        setLiveValues(Object.keys(map).length ? map : null);
-        setLiveState(Object.keys(map).length ? "live" : "error");
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setLiveValues(null);
-        setLiveState("error");
+
+    const applyRegions = (data, source, withTile) => {
+      if (cancelled) return;
+      const map = {};
+      (data.regions || []).forEach((r) => {
+        if (r?.name && typeof r.value === "number") map[r.name] = r.value;
       });
+      const has = Object.keys(map).length > 0;
+      setLiveValues(has ? map : null);
+      setLiveState(has ? "live" : "error");
+      setLiveSource(has ? source : null);
+      setGeeTile(withTile && data.tile?.url ? data.tile : null);
+    };
+
+    const fail = () => {
+      if (cancelled) return;
+      setLiveValues(null);
+      setLiveState("error");
+      setLiveSource(null);
+      setGeeTile(null);
+    };
+
+    if (GEE_TOPICS.has(topicId)) {
+      const level =
+        scope.level === "national"
+          ? "national"
+          : scope.level === "county"
+          ? "county"
+          : "subcounty";
+      setLiveState("loading");
+      setGeeTile(null);
+      fetchGeeMetric(topicId, {
+        level,
+        county: scope.county || undefined,
+        subcounty: scope.subcounty || undefined,
+      })
+        .then((data) => applyRegions(data, "Google Earth Engine", true))
+        .catch(fail);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (OSM_TOPICS.has(topicId) && scope.level === "national") {
+      setLiveState("loading");
+      setGeeTile(null);
+      fetchOsmMetric(topicId)
+        .then((data) => applyRegions(data, "OpenStreetMap", false))
+        .catch(fail);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setLiveValues(null);
+    setLiveState("idle");
+    setLiveSource(null);
+    setGeeTile(null);
     return () => {
       cancelled = true;
     };
-  }, [topicId, scope.level]);
+  }, [topicId, scope.level, scope.county, scope.subcounty]);
   // Report generation is gated behind an M-PESA payment. Clicking "Generate
   // report" opens the gateway; a successful payment builds and reveals it.
   const [showPayment, setShowPayment] = useState(false);
@@ -84,26 +135,50 @@ export default function TopicWorkspace({
     setReport(buildReport(topicId, scope, regions));
   };
 
-  // The map renders national counties, or the sub-counties of the active county.
-  const mapLevel = scope.level === "national" ? "national" : "county";
+  // Map level: national counties, the sub-counties of the active county, or the
+  // wards of the active sub-county. Ward focus stays on the sub-county's wards.
+  const mapLevel =
+    scope.level === "national"
+      ? "national"
+      : scope.level === "county"
+      ? "county"
+      : "subcounty";
 
   const handleDrill = (name) => {
     if (scope.level === "national") {
-      setScope({ level: "county", county: name, subcounty: "" });
+      setScope({ level: "county", county: name, subcounty: "", ward: "" });
+    } else if (scope.level === "county") {
+      // Clicking a sub-county drills into its wards.
+      setScope((s) => ({ ...s, level: "subcounty", subcounty: name, ward: "" }));
     } else {
-      // In a county view, clicking a sub-county focuses it.
-      setScope((s) => ({ ...s, level: "subcounty", subcounty: name }));
+      // In a sub-county (or ward) view, clicking a ward focuses it.
+      setScope((s) => ({ ...s, level: "ward", ward: name }));
     }
   };
 
-  const goNational = () => setScope({ level: "national", county: "", subcounty: "" });
+  const goNational = () =>
+    setScope({ level: "national", county: "", subcounty: "", ward: "" });
   const goCounty = () =>
-    setScope((s) => ({ level: "county", county: s.county, subcounty: "" }));
+    setScope((s) => ({
+      level: "county",
+      county: s.county,
+      subcounty: "",
+      ward: "",
+    }));
+  const goSubcounty = () =>
+    setScope((s) => ({
+      level: "subcounty",
+      county: s.county,
+      subcounty: s.subcounty,
+      ward: "",
+    }));
 
   // Headline figure for the current scope, derived from the visible regions.
   const headline = useMemo(() => {
-    if (scope.level === "subcounty") {
-      return regionValue(topicId, scope.subcounty);
+    // A focused ward is a leaf: show its own value. Every other level
+    // aggregates the child regions currently in view.
+    if (scope.level === "ward") {
+      return regionValue(topicId, scope.ward);
     }
     return aggregate(topicId, regions.map((r) => r.value));
   }, [scope, regions, topicId]);
@@ -115,7 +190,11 @@ export default function TopicWorkspace({
   }, [regions]);
 
   const childTier =
-    scope.level === "national" ? "counties" : "sub-counties";
+    scope.level === "national"
+      ? "counties"
+      : scope.level === "county"
+      ? "sub-counties"
+      : "wards";
 
   return (
     <div className="workspace">
@@ -145,7 +224,19 @@ export default function TopicWorkspace({
           {scope.subcounty && (
             <>
               <span className="sep">/</span>
-              <span className="crumb crumb--current">{scope.subcounty}</span>
+              <button
+                className="crumb"
+                onClick={goSubcounty}
+                disabled={scope.level === "subcounty"}
+              >
+                {scope.subcounty}
+              </button>
+            </>
+          )}
+          {scope.ward && (
+            <>
+              <span className="sep">/</span>
+              <span className="crumb crumb--current">{scope.ward}</span>
             </>
           )}
         </nav>
@@ -177,9 +268,9 @@ export default function TopicWorkspace({
         <div className="summary-status">
           <span className="dot" />{" "}
           {liveState === "live"
-            ? "Live · OpenStreetMap (per-county)"
+            ? `Live · ${liveSource}`
             : liveState === "loading"
-            ? "Loading live OpenStreetMap data…"
+            ? "Loading live data…"
             : SOURCE_STATUS_LABEL}
         </div>
       </div>
@@ -197,19 +288,21 @@ export default function TopicWorkspace({
             <span className="panel__hint">
               {scope.level === "national"
                 ? "Click a county to drill down"
-                : "Click a sub-county to focus it"}
+                : scope.level === "county"
+                ? "Click a sub-county to drill down"
+                : "Click a ward to focus it"}
             </span>
           </div>
           <TopicMap
             topicId={topicId}
             level={mapLevel}
             county={scope.county}
-            selectedRegion={
-              scope.level === "subcounty" ? scope.subcounty : null
-            }
+            subcounty={scope.subcounty}
+            selectedRegion={scope.level === "ward" ? scope.ward : null}
             onDrill={handleDrill}
             onRegionsLoaded={setRegions}
             liveValues={liveValues}
+            overlayTile={geeTile}
           />
         </section>
 
@@ -222,7 +315,9 @@ export default function TopicWorkspace({
           <div className="rank-list">
             {regions.map((r, i) => {
               const active =
-                scope.subcounty === r.name || scope.county === r.name;
+                scope.ward === r.name ||
+                scope.subcounty === r.name ||
+                scope.county === r.name;
               return (
                 <button
                   key={r.name}
@@ -253,7 +348,9 @@ export default function TopicWorkspace({
             <span className="panel__hint">
               {scope.level === "national"
                 ? "Click a name to drill into that county"
-                : "Click a name to zoom to that sub-county"}
+                : scope.level === "county"
+                ? "Click a name to drill into that sub-county"
+                : "Click a name to zoom to that ward"}
             </span>
           </div>
           <div className="chart-wrap">

@@ -16,7 +16,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .models import AEISUser, Alert, DataAsset, FieldReport, ProcessingJob
-from .services import auth, data_sources, domain, intelligence, jobs, osm_metrics, payments, reports
+from .services import auth, data_sources, domain, gee_metrics, intelligence, jobs, osm_metrics, payments, reports
 
 
 FRONTEND_DIST_DIR = settings.PROJECT_ROOT / "frontend" / "dist"
@@ -1219,6 +1219,26 @@ def osm_metric(request: HttpRequest, topic: str) -> JsonResponse:
     # No county -> national aggregate over all counties; ?county=<name> -> one.
     status, result = osm_metrics.metric_payload(topic, request.GET.get("county") or None)
     return api_json(result, status=status)
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def gee_metric(request: HttpRequest, topic: str) -> JsonResponse:
+    # Earth Engine zonal statistics + raster tile for a topic at the requested
+    # scope. ?level=national|county|subcounty with ?county= / ?subcounty= for the
+    # drill levels. Returns null values (not an error) when EE is unconfigured so
+    # the frontend falls back to scaffolding.
+    status, result = gee_metrics.metric_payload(
+        topic,
+        level=request.GET.get("level") or "national",
+        county=request.GET.get("county") or None,
+        subcounty=request.GET.get("subcounty") or None,
+    )
+    return api_json(result, status=status)
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def gee_status(request: HttpRequest) -> JsonResponse:
+    return api_json(gee_metrics.status_payload())
 
 
 @require_http_methods(["GET", "OPTIONS"])
