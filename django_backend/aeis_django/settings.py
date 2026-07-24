@@ -19,7 +19,7 @@ def _load_env_files(*names: str) -> None:
     resolved under ``PROJECT_ROOT``) using ``setdefault``, so a variable already
     present in the real environment is never overridden. Files are applied in
     order, so an earlier file wins over a later one; the real environment always
-    wins over both — deployment secrets are never clobbered by a local file.
+    wins over both â€” deployment secrets are never clobbered by a local file.
     """
 
     for name in names:
@@ -108,7 +108,7 @@ else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": os.environ.get("AEIS_DB_PATH", str(RUNTIME_DIR / "aeis.sqlite3")),
+            "NAME": os.environ.get("AEIS_DB_PATH", str(RUNTIME_DIR / "klia.sqlite3")),
             "OPTIONS": {"timeout": 20},
         }
     }
@@ -140,7 +140,7 @@ if "test" in sys.argv:
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "aeis-k-tests",
+            "LOCATION": "k-l-i-a-tests",
             "TIMEOUT": 900,
         }
     }
@@ -159,7 +159,7 @@ else:
 
 CORS_ALLOWED_ORIGIN = os.environ.get("AEIS_CORS_ALLOWED_ORIGIN", "").strip()
 
-# ── M-PESA / Safaricom Daraja payment gateway ───────────────────────────
+# â”€â”€ M-PESA / Safaricom Daraja payment gateway â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # When the consumer key/secret/passkey are absent the payment service runs
 # in simulation mode so the report-payment flow is fully demoable.
 MPESA_ENV = os.environ.get("AEIS_MPESA_ENV", "sandbox").strip().lower()
@@ -169,7 +169,7 @@ MPESA_SHORTCODE = os.environ.get("AEIS_MPESA_SHORTCODE", "174379").strip()
 MPESA_PAYBILL = os.environ.get("AEIS_MPESA_PAYBILL", "").strip() or MPESA_SHORTCODE
 MPESA_PASSKEY = os.environ.get("AEIS_MPESA_PASSKEY", "").strip()
 MPESA_CALLBACK_URL = os.environ.get("AEIS_MPESA_CALLBACK_URL", "").strip()
-MPESA_ACCOUNT_PREFIX = os.environ.get("AEIS_MPESA_ACCOUNT_PREFIX", "AEISK").strip()
+MPESA_ACCOUNT_PREFIX = os.environ.get("AEIS_MPESA_ACCOUNT_PREFIX", "KLIA").strip()
 MPESA_BUSINESS_NAME = os.environ.get("AEIS_MPESA_BUSINESS_NAME", "Kenya Space Agency").strip()
 try:
     REPORT_PRICE_KES = int(os.environ.get("AEIS_REPORT_PRICE_KES", "50"))

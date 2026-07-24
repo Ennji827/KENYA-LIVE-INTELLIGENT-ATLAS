@@ -78,7 +78,7 @@ INTELLIGENCE_SCHEMA = {
 }
 
 
-# ── Rules that govern insight generation ─────────────────────────────
+# â”€â”€ Rules that govern insight generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #
 # These rules define the persona and hard constraints applied to every
 # model-generated insight. They are written for a professional GIS /
@@ -89,7 +89,7 @@ INTELLIGENCE_SCHEMA = {
 # The same rules are echoed (in condensed form) inside the local fallback's
 # `explainability`, so the governance is consistent across both providers.
 GIS_ANALYST_RULES = """\
-You are the AEIS-K Geospatial Intelligence Analyst — a senior GIS expert briefing \
+You are the K-L-I-A Geospatial Intelligence Analyst â€” a senior GIS expert briefing \
 Kenyan national and county decision-makers. Generate insights under these rules:
 
 1. EVIDENCE ONLY. Use only the supplied JSON: the `workspace` layer (the topic and \
@@ -101,7 +101,7 @@ scaffolded placeholder data, not a measurement. You may describe its distributio
 must never present it as a confirmed real-world figure, and must recommend connecting a \
 verified source. State clearly which topics are backed by a live feed and which are not.
 
-3. STATE THE SCALE. Name the analytical tier (national → county → sub-county) for every \
+3. STATE THE SCALE. Name the analytical tier (national â†’ county â†’ sub-county) for every \
 finding. Do not attribute a parent-level pattern to individuals within it, and do not \
 extrapolate a finding to a finer or coarser scale than the data supports.
 
@@ -109,12 +109,12 @@ extrapolate a finding to a finer or coarser scale than the data supports.
 hotspots, outliers, and spatial inequality (e.g. the max-to-min ratio across regions). \
 Rank the named regions and cite the actual numbers with their unit.
 
-5. OBSERVATION ≠ INFERENCE. Separate what the data shows from what it might imply. Never \
+5. OBSERVATION â‰  INFERENCE. Separate what the data shows from what it might imply. Never \
 assign a cause (drought, damage, failure, under-investment) unless a connected source \
 supports it; otherwise say the driver cannot be confirmed from the available layers.
 
 6. EVERY INSIGHT HAS A REASON. Each item in `insights` pairs a finding (`text`) with the \
-analytical reason it was drawn (`reason`) — how it was computed or why it matters.
+analytical reason it was drawn (`reason`) â€” how it was computed or why it matters.
 
 7. CALIBRATE CONFIDENCE. Report confidence honestly and list the missing datasets that \
 would raise it. Prefer "low" when the analysis rests only on scaffolded values.
@@ -280,7 +280,7 @@ def _data_context(scope: dict, workspace: dict | None = None) -> tuple[dict, lis
         if stats:
             sources.append(
                 {
-                    "name": f"AEIS-K {block['metric']} distribution layer",
+                    "name": f"K-L-I-A {block['metric']} distribution layer",
                     "category": "workspace_layer",
                     "freshness": context["generated_at"],
                     "status": source_status,
@@ -288,7 +288,7 @@ def _data_context(scope: dict, workspace: dict | None = None) -> tuple[dict, lis
             )
         if source_status != "connected":
             missing.append(
-                f"Verified source for {block['metric']} — the {block['topic']} values shown are scaffolded placeholders."
+                f"Verified source for {block['metric']} â€” the {block['topic']} values shown are scaffolded placeholders."
             )
 
     if eo_relevant:
@@ -348,7 +348,7 @@ def _data_context(scope: dict, workspace: dict | None = None) -> tuple[dict, lis
     if assets.exists():
         sources.append(
             {
-                "name": "AEIS-K GIS asset catalogue",
+                "name": "K-L-I-A GIS asset catalogue",
                 "category": "uploaded_gis",
                 "freshness": assets.first().created_at.isoformat(),
                 "status": "available",
@@ -390,7 +390,7 @@ def _data_context(scope: dict, workspace: dict | None = None) -> tuple[dict, lis
     if field_reports.exists():
         sources.append(
             {
-                "name": "AEIS-K field reports",
+                "name": "K-L-I-A field reports",
                 "category": "field_observations",
                 "freshness": field_reports.first().updated_at.isoformat(),
                 "status": "available",
@@ -462,7 +462,7 @@ def _workspace_local_insights(block: dict, question: str) -> list[dict]:
     if stats.get("spread_ratio"):
         insights.append(
             {
-                "text": f"The distribution is uneven — {top['name']} is about {stats['spread_ratio']}× {bottom['name']}.",
+                "text": f"The distribution is uneven â€” {top['name']} is about {stats['spread_ratio']}Ã— {bottom['name']}.",
                 "reason": "A large max-to-min ratio flags spatial inequality that may warrant targeted attention.",
             }
         )
@@ -555,7 +555,7 @@ def _local_analysis(question: str, scope: dict, context: dict, missing: list[str
 
     field_summary = context.get("field_reports") or {}
     observations.append(
-        f"AEIS-K contains {field_summary.get('count', 0)} field report(s), of which {field_summary.get('verified', 0)} are verified."
+        f"K-L-I-A contains {field_summary.get('count', 0)} field report(s), of which {field_summary.get('verified', 0)} are verified."
     )
     if field_summary.get("count", 0) == 0:
         actions.append("Assign field verification where satellite or forecast evidence is insufficient.")
@@ -584,10 +584,10 @@ def _local_analysis(question: str, scope: dict, context: dict, missing: list[str
         evidence.insert(
             0,
             {
-                "source": f"AEIS-K {workspace_block.get('metric')} distribution layer",
+                "source": f"K-L-I-A {workspace_block.get('metric')} distribution layer",
                 "observation": (
                     f"Mean {st['mean']} across {st['count']} regions; "
-                    f"range {st['min']['value']}–{st['max']['value']}."
+                    f"range {st['min']['value']}â€“{st['max']['value']}."
                 ),
             },
         )
@@ -604,7 +604,7 @@ def _local_analysis(question: str, scope: dict, context: dict, missing: list[str
         confidence = "high"
 
     summary = (
-        f"AEIS-K reviewed the available evidence for {scope['name']}. "
+        f"K-L-I-A reviewed the available evidence for {scope['name']}. "
         f"{observations[0]} "
         "The result is intentionally limited to connected, source-dated data."
     )
@@ -658,7 +658,7 @@ def _openai_analysis(question: str, scope: dict, context: dict, missing: list[st
             f"User question: {question}\n"
             f"Scope: {json.dumps(scope, ensure_ascii=False)}\n"
             f"Known missing data: {json.dumps(missing, ensure_ascii=False)}\n"
-            "The `workspace` block below is the primary analytic layer — the topic and per-region "
+            "The `workspace` block below is the primary analytic layer â€” the topic and per-region "
             "values the user is viewing right now. Ground your insights in it, honour its "
             "`source_status`, and use the remaining context only for corroboration.\n"
             f"Evidence context: {json.dumps(context, ensure_ascii=False, default=str)}"
@@ -673,7 +673,7 @@ def _openai_analysis(question: str, scope: dict, context: dict, missing: list[st
         },
     }
     # `reasoning.effort` is only accepted by reasoning models (o-series, gpt-5*);
-    # standard chat models (gpt-4o, gpt-4.1, …) reject it. Send it only when the
+    # standard chat models (gpt-4o, gpt-4.1, â€¦) reject it. Send it only when the
     # configured model supports it so either family works out of the box.
     if re.match(r"^(o\d|gpt-5)", model):
         request_payload["reasoning"] = {"effort": "low"}
@@ -684,7 +684,7 @@ def _openai_analysis(question: str, scope: dict, context: dict, missing: list[st
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "AEIS-K/1.0 intelligence",
+            "User-Agent": "K-L-I-A/1.0 intelligence",
         },
     )
     try:

@@ -2,9 +2,9 @@
 
 Supports two ways to pay for an intelligence report:
 
-* **Paybill** — the user manually pushes money to the configured Paybill
+* **Paybill** â€” the user manually pushes money to the configured Paybill
   number using an account reference we hand them, then confirms.
-* **M-PESA Express (STK push / prompt)** — we ask Daraja to pop a PIN
+* **M-PESA Express (STK push / prompt)** â€” we ask Daraja to pop a PIN
   prompt on the user's phone and poll for the result.
 
 When Daraja credentials are not configured the module runs in a
@@ -88,7 +88,7 @@ def normalize_phone(raw: str) -> str:
 
 def account_reference(prefix_hint: str = "") -> str:
     """A short, human-readable Paybill account number for this payment."""
-    prefix = _cfg("MPESA_ACCOUNT_PREFIX", "AEISK") or "AEISK"
+    prefix = _cfg("MPESA_ACCOUNT_PREFIX", "KLIA") or "KLIA"
     token = (prefix_hint or uuid.uuid4().hex[:6]).upper()
     token = "".join(ch for ch in token if ch.isalnum())[:8] or uuid.uuid4().hex[:6].upper()
     return f"{prefix}-{token}"
@@ -101,13 +101,13 @@ def gateway_config() -> dict[str, Any]:
         "paybill": _cfg("MPESA_PAYBILL") or _cfg("MPESA_SHORTCODE", "174379"),
         "amount": report_price(),
         "currency": "KES",
-        "account_prefix": _cfg("MPESA_ACCOUNT_PREFIX", "AEISK") or "AEISK",
+        "account_prefix": _cfg("MPESA_ACCOUNT_PREFIX", "KLIA") or "KLIA",
         "simulation": is_simulation(),
         "methods": ["stk", "paybill"],
     }
 
 
-# ── Cache-backed transaction store ──────────────────────────────────────
+# â”€â”€ Cache-backed transaction store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _txn_key(checkout_id: str) -> str:
     return f"mpesa:txn:{checkout_id}"
@@ -121,7 +121,7 @@ def _load_txn(checkout_id: str) -> dict[str, Any] | None:
     return cache.get(_txn_key(checkout_id))
 
 
-# ── Live Daraja helpers ─────────────────────────────────────────────────
+# â”€â”€ Live Daraja helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _http_json(url: str, *, headers: dict[str, str], data: bytes | None = None) -> dict[str, Any]:
     request = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")
@@ -158,7 +158,7 @@ def _stk_password(timestamp: str) -> tuple[str, str]:
     return base64.b64encode(raw).decode(), shortcode
 
 
-# ── Public API ──────────────────────────────────────────────────────────
+# â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def initiate_stk(*, phone: str, account_ref: str, description: str = "Intelligence report") -> dict[str, Any]:
     """Trigger an STK push (or simulate one) and return tracking identifiers."""
@@ -246,7 +246,7 @@ def query_status(checkout_id: str) -> dict[str, Any]:
     if not txn:
         raise PaymentError("Unknown or expired transaction.", status=404)
 
-    # Terminal states are cached — nothing more to do.
+    # Terminal states are cached â€” nothing more to do.
     if txn["status"] in {"completed", "failed"}:
         return _status_payload(txn)
 

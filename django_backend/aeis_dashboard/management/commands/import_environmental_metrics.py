@@ -87,7 +87,7 @@ class Command(BaseCommand):
         parser.add_argument("--source-slug", default="", help="Default source slug when CSV rows do not include one.")
         parser.add_argument("--source-name", default="", help="Default real source name when CSV rows do not include one.")
         parser.add_argument("--provider", default="", help="Default provider/agency name.")
-        parser.add_argument("--imported-by-email", default="", help="Optional AEIS-K user email to attach as importer.")
+        parser.add_argument("--imported-by-email", default="", help="Optional K-L-I-A user email to attach as importer.")
         parser.add_argument("--dry-run", action="store_true", help="Validate the file without writing rows.")
 
     def handle(self, *args, **options):
@@ -99,7 +99,7 @@ class Command(BaseCommand):
         if options["imported_by_email"]:
             importer = AEISUser.objects.filter(email__iexact=options["imported_by_email"]).first()
             if not importer:
-                raise CommandError(f"No AEIS-K user found for {options['imported_by_email']}")
+                raise CommandError(f"No K-L-I-A user found for {options['imported_by_email']}")
 
         created = 0
         updated = 0

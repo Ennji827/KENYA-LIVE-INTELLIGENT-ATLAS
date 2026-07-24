@@ -103,7 +103,7 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
     onAuthenticated(payload);
   };
 
-  // ── Google GIS ──────────────────────────────────────────────
+  // â”€â”€ Google GIS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const { prompt: googlePrompt, enabled: googleEnabled } = useGoogleGis(async (idToken) => {
     setGBusy(true); setGError("");
     try {
@@ -140,7 +140,7 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
     setGBusy(false);
   };
 
-  // ── Sign in ──────────────────────────────────────────────────
+  // â”€â”€ Sign in â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSignIn = async (e) => {
     e.preventDefault();
     setSiError(""); setSiBusy(true);
@@ -169,7 +169,7 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
     setSiBusy(false);
   };
 
-  // ── Register ─────────────────────────────────────────────────
+  // â”€â”€ Register â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleRegister = async (e) => {
     e.preventDefault();
     setRError("");
@@ -190,7 +190,7 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
     setRBusy(false);
   };
 
-  // ── Forgot password ──────────────────────────────────────────
+  // â”€â”€ Forgot password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleForgot = async (e) => {
     e.preventDefault();
     setFpMsg(""); setFpBusy(true);
@@ -205,7 +205,7 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
     setFpBusy(false);
   };
 
-  // ── Render ───────────────────────────────────────────────────
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <div className="auth-shell">
       <div className="auth-card">
@@ -218,7 +218,7 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
           </button>
         )}
 
-        {/* ── Sign In ── */}
+        {/* â”€â”€ Sign In â”€â”€ */}
         {view === "signin" && (
           <>
             <h2 className="auth-heading">Welcome back</h2>
@@ -235,11 +235,11 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
               <div className="auth-field">
                 <label htmlFor="si-gcit">Select your citation to finish sign-up</label>
                 <select id="si-gcit" value={gCitation} onChange={(e) => setGCitation(e.target.value)}>
-                  <option value="">— select citation —</option>
+                  <option value="">â€” select citation â€”</option>
                   {CITATIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
                 <button type="button" className="auth-btn" style={{ marginTop: 8 }} onClick={completeGoogle} disabled={!gCitation || gBusy}>
-                  {gBusy ? "Please wait…" : "Complete sign-up"}
+                  {gBusy ? "Please waitâ€¦" : "Complete sign-up"}
                 </button>
               </div>
             )}
@@ -254,14 +254,14 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
               </div>
               <div className="auth-field">
                 <label htmlFor="si-pw">Password</label>
-                <input id="si-pw" type="password" value={siPassword} onChange={(e) => setSiPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" required />
+                <input id="si-pw" type="password" value={siPassword} onChange={(e) => setSiPassword(e.target.value)} placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" autoComplete="current-password" required />
                 <button type="button" className="auth-forgot-link" onClick={() => { setView("forgot"); setFpEmail(siEmail); }}>
                   Forgot password?
                 </button>
               </div>
               {siError && <p className="auth-msg error">{siError}</p>}
               <button type="submit" className="auth-btn" disabled={siBusy}>
-                {siBusy ? "Signing in…" : "Sign In"}
+                {siBusy ? "Signing inâ€¦" : "Sign In"}
               </button>
             </form>
 
@@ -271,17 +271,17 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
             </p>
             {onStaff && (
               <p className="auth-switch">
-                <button type="button" className="auth-link" onClick={onStaff}>Government / staff access →</button>
+                <button type="button" className="auth-link" onClick={onStaff}>Government / staff access â†’</button>
               </p>
             )}
           </>
         )}
 
-        {/* ── Register ── */}
+        {/* â”€â”€ Register â”€â”€ */}
         {view === "register" && (
           <>
             <h2 className="auth-heading">Create account</h2>
-            <p className="auth-sub">Join AEIS-K today</p>
+            <p className="auth-sub">Join K-L-I-A today</p>
 
             {googleEnabled && (
               <button type="button" className="auth-google-btn" onClick={googlePrompt} disabled={gBusy}>
@@ -294,11 +294,11 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
               <div className="auth-field">
                 <label htmlFor="reg-gcit">Select your citation to finish sign-up</label>
                 <select id="reg-gcit" value={gCitation} onChange={(e) => setGCitation(e.target.value)}>
-                  <option value="">— select citation —</option>
+                  <option value="">â€” select citation â€”</option>
                   {CITATIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
                 <button type="button" className="auth-btn" style={{ marginTop: 8 }} onClick={completeGoogle} disabled={!gCitation || gBusy}>
-                  {gBusy ? "Please wait…" : "Complete sign-up"}
+                  {gBusy ? "Please waitâ€¦" : "Complete sign-up"}
                 </button>
               </div>
             )}
@@ -332,13 +332,13 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
               <div className="auth-field">
                 <label htmlFor="r-cit">Citation</label>
                 <select id="r-cit" value={rCitation} onChange={(e) => setRCitation(e.target.value)} required>
-                  <option value="">— select your citation —</option>
+                  <option value="">â€” select your citation â€”</option>
                   {CITATIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
               {rError && <p className="auth-msg error">{rError}</p>}
               <button type="submit" className="auth-btn" disabled={rBusy}>
-                {rBusy ? "Creating account…" : "Create Account"}
+                {rBusy ? "Creating accountâ€¦" : "Create Account"}
               </button>
             </form>
 
@@ -349,7 +349,7 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
           </>
         )}
 
-        {/* ── Forgot password ── */}
+        {/* â”€â”€ Forgot password â”€â”€ */}
         {view === "forgot" && (
           <>
             <h2 className="auth-heading">Reset password</h2>
@@ -369,13 +369,13 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
                   <input id="fp-em" type="email" value={fpEmail} onChange={(e) => setFpEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" required />
                 </div>
                 <button type="submit" className="auth-btn" disabled={fpBusy}>
-                  {fpBusy ? "Sending…" : "Send reset link"}
+                  {fpBusy ? "Sendingâ€¦" : "Send reset link"}
                 </button>
               </form>
             )}
 
             <p className="auth-switch">
-              <button type="button" className="auth-link" onClick={() => setView("signin")}>← Back to sign in</button>
+              <button type="button" className="auth-link" onClick={() => setView("signin")}>â† Back to sign in</button>
             </p>
           </>
         )}

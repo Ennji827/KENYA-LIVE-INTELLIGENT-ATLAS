@@ -1,8 +1,8 @@
-# AEIS-K Django Backend
+# K-L-I-A Django Backend
 
-This is the only AEIS-K backend. It owns API routing, authentication, sessions, audit records, system settings, GIS services, data quality, weather integration, AI intelligence, report workflows, user management, field reports, and frontend delivery.
+This is the only K-L-I-A backend. It owns API routing, authentication, sessions, audit records, system settings, GIS services, data quality, weather integration, AI intelligence, report workflows, user management, field reports, and frontend delivery.
 
-SQLite with WAL is the local default. The control script stores the local SQLite database at `%LOCALAPPDATA%\AEIS-K\aeis-live.sqlite3` unless `AEIS_DB_PATH` is set. Set `AEIS_DB_ENGINE=postgresql` plus the `AEIS_DB_*` variables for a PostgreSQL deployment. The request middleware emits structured JSON logs with request IDs and timing.
+SQLite with WAL is the local default. The control script stores the local SQLite database at `%LOCALAPPDATA%\K-L-I-A\klia-live.sqlite3` unless `AEIS_DB_PATH` is set. Set `AEIS_DB_ENGINE=postgresql` plus the `AEIS_DB_*` variables for a PostgreSQL deployment. The request middleware emits structured JSON logs with request IDs and timing.
 
 Run from the repository root:
 

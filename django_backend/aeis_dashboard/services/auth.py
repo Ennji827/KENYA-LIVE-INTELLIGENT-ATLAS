@@ -92,40 +92,37 @@ def _make_username(email: str) -> str:
 
 
 def county_email(name: str) -> str:
-    return f"{slugify(name)}@county.aeis-k.local"
+    return f"{slugify(name)}@county.k-l-i-a.local"
 
 
 def seed_default_accounts() -> dict:
-    county_count = AEISUser.objects.filter(role=AEISUser.Role.COUNTY).count()
-    national_count = AEISUser.objects.filter(
-        role__in=[AEISUser.Role.MINISTRY, AEISUser.Role.ANALYST, AEISUser.Role.AUDITOR]
-    ).count()
-    if county_count >= 47 and national_count >= 3:
-        SystemSetting.objects.get_or_create(
-            key="public_access_locked",
-            defaults={"value": "1" if domain.public_access_mode() else "0"},
-        )
-        return {"created": 0, "total": county_count + national_count}
-
     created = 0
     for feature in domain.counties():
         name = domain.county_name(feature)
         code = domain.county_code(feature)
+        defaults = {
+            "email": county_email(name),
+            "county_code": code,
+            "county_name": name,
+            "role": AEISUser.Role.COUNTY,
+            "provider": "password",
+            "is_active": True,
+        }
         user, was_created = AEISUser.objects.get_or_create(
             username=f"{slugify(name)}_county",
-            defaults={
-                "email": county_email(name),
-                "county_code": code,
-                "county_name": name,
-                "role": AEISUser.Role.COUNTY,
-                "provider": "password",
-                "is_active": True,
-            },
+            defaults=defaults,
         )
+        changed = False
+        for field, value in defaults.items():
+            if getattr(user, field) != value:
+                setattr(user, field, value)
+                changed = True
         if was_created:
             user.set_password(domain.DEFAULT_COUNTY_PASSWORD)
-            user.save(update_fields=["password"])
             created += 1
+            changed = True
+        if changed:
+            user.save()
 
     for profile in domain.NATIONAL_AUTH_ACCOUNTS:
         user, was_created = AEISUser.objects.get_or_create(
@@ -181,7 +178,7 @@ def session_payload(session: AccessSession) -> dict:
             "username": user.username,
             "email": user.email,
             "provider": session.provider,
-            "command_center": "AEIS-K Public Portal",
+            "command_center": "K-L-I-A Public Portal",
             "gps_status": "not_required",
             "boundary_scope": "public_read",
             "permissions": ROLE_PERMISSIONS.get(user.role, []),
@@ -210,7 +207,7 @@ def session_payload(session: AccessSession) -> dict:
     demo = session.provider == "password_demo"
     if user.role == AEISUser.Role.AUDITOR:
         boundary_scope = "national_read_only"
-        command_center = "AEIS-K National Audit Workspace"
+        command_center = "K-L-I-A National Audit Workspace"
         gps_status = "not_required"
     elif user.role == AEISUser.Role.FARMER:
         boundary_scope = "own_field_site_only"
@@ -523,7 +520,7 @@ def national_login_accounts() -> list[dict]:
                 "role": user.role,
                 "provider": user.provider,
                 "is_active": user.is_active,
-                "command_center": profile.get("command_center", "AEIS-K National Access"),
+                "command_center": profile.get("command_center", "K-L-I-A National Access"),
                 "boundary_scope": profile.get("boundary_scope", "national"),
                 "permissions": profile.get("permissions", []),
                 "created_at": user.date_joined.isoformat(),

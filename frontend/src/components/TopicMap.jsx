@@ -144,6 +144,13 @@ export default function TopicMap({
             (f) => f.properties?.ADM2_EN === subcounty,
           );
         }
+        if (level === "subcounty") {
+          features = features.filter(
+            (f) =>
+              (!county || f.properties?.ADM1_EN === county) &&
+              (!subcounty || f.properties?.ADM2_EN === subcounty),
+          );
+        }
         const filtered = { type: "FeatureCollection", features };
         setGeojson(filtered);
 
@@ -180,11 +187,13 @@ export default function TopicMap({
     const name = feature.properties?.[nameKey];
     const value = valueFor(name);
     const isSelected = selectedRegion && name === selectedRegion;
+    const imageryVisible = baseLayer === "hybrid" || baseLayer === "satellite";
     return {
       fillColor: rampColor(topicId, value, min, max),
-      weight: isSelected ? 3 : 1,
-      color: isSelected ? "#0f172a" : "#e2e8f0",
-      fillOpacity: 0.6,
+      weight: isSelected ? 3 : 1.4,
+      color: isSelected ? "#0f172a" : "#f8fafc",
+      fillOpacity: imageryVisible ? (isSelected ? 0.38 : 0.26) : (isSelected ? 0.52 : 0.42),
+      opacity: imageryVisible ? 0.92 : 0.8,
       dashArray: isSelected ? "" : "0",
     };
   };
