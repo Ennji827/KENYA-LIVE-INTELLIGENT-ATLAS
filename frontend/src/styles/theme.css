@@ -1,8 +1,8 @@
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/* ──────────────────────────────────────────────────────────────
    Shared theme: design tokens, glassmorphism primitives, the auth
    gateway, and the "Powered by KSA" mark. Self-contained so the app
    no longer depends on the old agricultural dashboard stylesheet.
-   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+   ────────────────────────────────────────────────────────────── */
 
 :root {
   /* Neutral brand + surface tokens */
@@ -63,7 +63,7 @@
   color-scheme: dark;
 }
 
-/* â”€â”€ Sharp corners, all through â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/* ── Sharp corners, all through ─────────────────────────────────
    Design directive: no rounded corners anywhere. One global rule so
    every element (incl. future ones and third-party CSS like Leaflet)
    inherits it. The KSA orbit graphic is re-rounded below since it is
@@ -83,7 +83,7 @@
   box-shadow: var(--glass-shadow);
 }
 
-/* â”€â”€ Shared branded header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/* ── Shared branded header ───────────────────────────────────────
    The gradient-glass top bar used on the landing (home) page and
    across the signed-in app. Sticky, translucent, blurs content that
    scrolls beneath it. Sits above the map (z-index) but below modals. */
@@ -182,7 +182,7 @@
   .site-header__inner { padding: 10px 16px; }
 }
 
-/* â”€â”€ Auth gateway â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Auth gateway ───────────────────────────────────────────── */
 .auth-shell {
   min-height: 100vh;
   display: grid;
@@ -277,7 +277,7 @@
 }
 .auth-back-link:hover { color: var(--aeis-brand-deep); }
 
-/* â”€â”€ Powered by KSA (animated mark) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Powered by KSA (animated mark) ─────────────────────────── */
 .aeis-powered-by {
   display: grid; justify-items: center; gap: 8px;
   border: 1px solid var(--glass-border); border-radius: 12px;
@@ -287,12 +287,12 @@
 }
 .aeis-powered-label { color: var(--aeis-teal); font-size: 11px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
 .aeis-powered-logo-wrap {
-  --klia-ksa-logo-width: 150px;
+  --aeis-ksa-logo-width: 150px;
   position: relative; display: grid; place-items: center;
-  width: min(100%, var(--klia-ksa-logo-width)); min-height: 104px; isolation: isolate;
+  width: min(100%, var(--aeis-ksa-logo-width)); min-height: 104px; isolation: isolate;
 }
 .aeis-powered-logo-wrap img {
-  position: relative; z-index: 3; width: min(100%, var(--klia-ksa-logo-width)); height: auto;
+  position: relative; z-index: 3; width: min(100%, var(--aeis-ksa-logo-width)); height: auto;
   filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18));
 }
 .aeis-powered-orbit { position: absolute; z-index: 1; border: 1px solid rgba(15, 118, 110, 0.4); border-radius: 999px; pointer-events: none; }

@@ -1,6 +1,6 @@
 import React from "react";
 
-// K-L-I-A brand mark (matches the landing footer/logo).
+// AEIS-K brand mark (matches the landing footer/logo).
 const BrandLogo = (props) => (
   <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden="true" {...props}>
     <rect width="32" height="32" fill="#0f4c81" />
@@ -10,7 +10,7 @@ const BrandLogo = (props) => (
 );
 
 // Shared, branded top bar. Used on the landing "home" page and across the
-// signed-in app (hub Â· area select Â· workspace) so every screen carries the
+// signed-in app (hub · area select · workspace) so every screen carries the
 // same gradient-glass identity. Actions adapt to whether a user is signed in.
 export default function SiteHeader({
   user,
@@ -20,7 +20,7 @@ export default function SiteHeader({
   onSignIn,
   onSignUp,
   onSignOut,
-  active, // "home" | "hub" | "reports" | undefined â€” marks / hides the current section
+  active, // "home" | "hub" | "reports" | undefined — marks / hides the current section
 }) {
   const displayName =
     user && (user.first_name || user.full_name || user.name || user.email)
@@ -34,10 +34,10 @@ export default function SiteHeader({
           type="button"
           className="site-header__brand"
           onClick={onHome}
-          aria-label="K-L-I-A home"
+          aria-label="AEIS-K home"
         >
           <BrandLogo />
-          <span className="site-header__name">K-L-I-A</span>
+          <span className="site-header__name">AEIS-K</span>
         </button>
 
         <div className="site-header__actions">

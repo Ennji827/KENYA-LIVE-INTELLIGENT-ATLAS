@@ -64,7 +64,7 @@ export default function LandingPage({
   return (
     <div className="lp-root">
 
-      {/* â”€â”€ Nav (shared branded header) â”€â”€ */}
+      {/* ── Nav (shared branded header) ── */}
       <SiteHeader
         user={authenticated ? user : null}
         onHome={scrollTop}
@@ -75,7 +75,7 @@ export default function LandingPage({
         active="home"
       />
 
-      {/* â”€â”€ Hero copy â”€â”€ */}
+      {/* ── Hero copy ── */}
       <section className="lp-hero">
         <div className="lp-hero-inner">
           <div className="lp-badge">National Geospatial Intelligence</div>
@@ -86,7 +86,7 @@ export default function LandingPage({
         </div>
       </section>
 
-      {/* â”€â”€ Hero slideshow â”€â”€ */}
+      {/* ── Hero slideshow ── */}
       <section className="lp-slideshow" onMouseEnter={pause} onMouseLeave={resume}>
         <div className="lp-slides" aria-roledescription="carousel">
           {SLIDES.map((slide, i) => (
@@ -147,7 +147,7 @@ export default function LandingPage({
         </div>
       </section>
 
-      {/* â”€â”€ Explore topics â”€â”€ */}
+      {/* ── Explore topics ── */}
       <section className="lp-topics">
         <div className="lp-section-inner">
           <h2 className="lp-section-title">Explore the intelligence topics</h2>
@@ -167,7 +167,7 @@ export default function LandingPage({
         </div>
       </section>
 
-      {/* â”€â”€ CTA banner â”€â”€ */}
+      {/* ── CTA banner ── */}
       <section className="lp-cta-band">
         <div className="lp-section-inner lp-cta-band-inner">
           <div>
@@ -175,7 +175,7 @@ export default function LandingPage({
             <p className="lp-cta-band-sub">
               {authenticated
                 ? "Jump into the intelligence hub and drill down from national to sub-county level."
-                : "Join researchers, analysts, and decision makers using K-L-I-A."}
+                : "Join researchers, analysts, and decision makers using AEIS-K."}
             </p>
           </div>
           <div className="lp-cta-band-actions">
@@ -191,7 +191,7 @@ export default function LandingPage({
         </div>
       </section>
 
-      {/* â”€â”€ Footer â”€â”€ */}
+      {/* ── Footer ── */}
       <footer className="lp-footer">
         <div className="lp-section-inner lp-footer-grid">
           <div className="lp-footer-brand">
@@ -201,10 +201,10 @@ export default function LandingPage({
                 <path d="M8 22 L16 10 L24 22" stroke="#4ade80" strokeWidth="2.5" strokeLinejoin="round" fill="none" />
                 <circle cx="16" cy="10" r="2" fill="#4ade80" />
               </svg>
-              <span className="lp-logo-name">K-L-I-A</span>
+              <span className="lp-logo-name">AEIS-K</span>
             </div>
             <p className="lp-footer-copy">
-              National geospatial intelligence for Kenya â€” climate, environment,
+              National geospatial intelligence for Kenya — climate, environment,
               infrastructure, and population mapped to every county.
             </p>
           </div>
@@ -241,7 +241,7 @@ export default function LandingPage({
 
         <div className="lp-footer-bottom">
           <div className="lp-section-inner lp-footer-bottom-inner">
-            <span>Â© {new Date().getFullYear()} K-L-I-A Â· Resource and Ecosystem Intelligence System for Kenya</span>
+            <span>© {new Date().getFullYear()} AEIS-K · Resource and Ecosystem Intelligence System for Kenya</span>
             <span>Kenya Space Agency</span>
           </div>
         </div>

@@ -51,16 +51,16 @@ export default function IntelHub({ onOpenTopic }) {
   return (
     <div className="hub">
       <header className="hub__hero">
-        <div className="hub__eyebrow">K-L-I-A Â· Critical Intelligence System</div>
+        <div className="hub__eyebrow">AEIS-K · Critical Intelligence System</div>
         <h1>National Intelligence Hub</h1>
         <p>
           Live geospatial intelligence for decision makers and researchers.
           Select a topic, choose your area of interest, then drill down from
-          national to county and sub-county level â€” generate reports and ask the
+          national to county and sub-county level — generate reports and ask the
           model for insights.
         </p>
         <div className="hub__note">
-          <span className="dot" /> {SOURCE_STATUS_LABEL} â€” values are structural
+          <span className="dot" /> {SOURCE_STATUS_LABEL} — values are structural
           placeholders until verified feeds are connected.
         </div>
 
@@ -79,7 +79,7 @@ export default function IntelHub({ onOpenTopic }) {
                 </span>
                 <span className="hub__stat-label">
                   {provider.openai_configured
-                    ? `Model Â· ${provider.openai_model}`
+                    ? `Model · ${provider.openai_model}`
                     : "Rule-based engine"}
                 </span>
               </div>

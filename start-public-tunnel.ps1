@@ -13,7 +13,7 @@ if (-not $cloudflared) {
   exit 1
 }
 
-Write-Host "Starting K-L-I-A public HTTPS tunnel to http://127.0.0.1:$Port"
+Write-Host "Starting AEIS-K public HTTPS tunnel to http://127.0.0.1:$Port"
 Write-Host "Keep this window open while testers use the generated trycloudflare.com URL."
 Write-Host "Use the Ministry Admin panel lock button before sharing the public URL."
 

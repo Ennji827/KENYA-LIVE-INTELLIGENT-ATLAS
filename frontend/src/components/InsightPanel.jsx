@@ -58,7 +58,6 @@ export default function InsightPanel({ topicId, scope, regions, dataStatus = "sc
       level: scope.level,
       county: scope.county || "",
       subcounty: scope.subcounty || "",
-      ward: scope.ward || "",
       regions: regions.map((r) => ({ name: r.name, value: r.value })),
     };
 

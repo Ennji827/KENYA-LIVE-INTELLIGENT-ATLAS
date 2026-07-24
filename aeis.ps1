@@ -20,26 +20,19 @@ $Root = $PSScriptRoot
 $Runtime = Join-Path $Root ".runtime"
 $Frontend = Join-Path $Root "frontend"
 $Backend = Join-Path $Root "django_backend"
-$TaskName = "K-L-I-A Always On"
+$TaskName = "AEIS-K Always On"
 $BackendUrl = "http://127.0.0.1:8000"
 $FrontendUrl = "http://localhost:5173"
 
 function Get-AeisDefaultDbPath {
   $localDataRoot = if ($env:LOCALAPPDATA) {
-    Join-Path $env:LOCALAPPDATA "K-L-I-A"
+    Join-Path $env:LOCALAPPDATA "AEIS-K"
   }
   else {
     Join-Path $Runtime "local-data"
   }
   New-Item -ItemType Directory -Force $localDataRoot | Out-Null
-  $newPath = Join-Path $localDataRoot "klia-live.sqlite3"
-  if (-not (Test-Path -LiteralPath $newPath) -and $env:LOCALAPPDATA) {
-    $legacyPath = Join-Path (Join-Path $env:LOCALAPPDATA "AEIS-K") "aeis-live.sqlite3"
-    if (Test-Path -LiteralPath $legacyPath) {
-      Copy-Item -LiteralPath $legacyPath -Destination $newPath -Force
-    }
-  }
-  return $newPath
+  return (Join-Path $localDataRoot "aeis-live.sqlite3")
 }
 
 function Get-AeisPython {
@@ -237,7 +230,7 @@ function Start-Backend {
       "--connection-limit=500",
       "--channel-timeout=120",
       "--max-request-body-size=115343360",
-      "--ident=K-L-I-A",
+      "--ident=AEIS-K",
       "aeis_django.wsgi:application"
     ) `
     -WorkingDirectory $Backend `
@@ -269,13 +262,13 @@ function Start-FrontendDevelopment {
   $owner = Get-PortOwner $port
   if ($owner) {
     if (Test-AeisProcess $owner) {
-      Write-Host "K-L-I-A development frontend is already running." -ForegroundColor Yellow
+      Write-Host "AEIS-K development frontend is already running." -ForegroundColor Yellow
       Write-Host "http://localhost:$port" -ForegroundColor Green
       return
     }
     $port = Get-FreePort -Start 5174 -End 5199
     Write-Host "Port 5173 is already used by $($owner.Name) (PID $($owner.ProcessId))." -ForegroundColor Yellow
-    Write-Host "Starting K-L-I-A development frontend on http://localhost:$port instead." -ForegroundColor Yellow
+    Write-Host "Starting AEIS-K development frontend on http://localhost:$port instead." -ForegroundColor Yellow
   }
 
   Push-Location $Frontend
@@ -298,7 +291,7 @@ function Show-AeisStatus {
   $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 
   Write-Host ""
-  Write-Host "K-L-I-A status" -ForegroundColor Cyan
+  Write-Host "AEIS-K status" -ForegroundColor Cyan
   Write-Host "-------------"
   Write-Host "Production dashboard: $(if (Test-HttpHealth "$BackendUrl/health") { "HEALTHY  $BackendUrl" } else { "STOPPED" })"
   Write-Host "Development frontend: $(if ($frontendOwner -and (Test-AeisProcess $frontendOwner)) { "RUNNING  $FrontendUrl" } else { "STOPPED" })"
@@ -338,7 +331,7 @@ function Install-AeisStartup {
     -Trigger $trigger `
     -Principal $principal `
     -Settings $settings `
-    -Description "Keeps the local K-L-I-A Django server and processing worker available after Windows logon." `
+    -Description "Keeps the local AEIS-K Django server and processing worker available after Windows logon." `
     -Force | Out-Null
 
   Stop-AeisProcesses
@@ -347,7 +340,7 @@ function Install-AeisStartup {
     Start-Sleep -Milliseconds 500
     if (Test-HttpHealth "$BackendUrl/health") { break }
   }
-  Write-Host "K-L-I-A automatic startup installed." -ForegroundColor Green
+  Write-Host "AEIS-K automatic startup installed." -ForegroundColor Green
   Write-Host "Use $BackendUrl for normal operation." -ForegroundColor Green
 }
 
@@ -364,12 +357,12 @@ switch ($Action) {
     else {
       Start-ManagedRuntime -Prepare $true
     }
-    Write-Host "K-L-I-A is ready: $BackendUrl" -ForegroundColor Green
+    Write-Host "AEIS-K is ready: $BackendUrl" -ForegroundColor Green
   }
   "stop" {
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     Stop-AeisProcesses
-    Write-Host "K-L-I-A servers stopped." -ForegroundColor Yellow
+    Write-Host "AEIS-K servers stopped." -ForegroundColor Yellow
   }
   "restart" {
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
@@ -386,7 +379,7 @@ switch ($Action) {
       Start-Sleep -Milliseconds 500
       if (Test-HttpHealth "$BackendUrl/health") { break }
     }
-    Write-Host "K-L-I-A restarted: $BackendUrl" -ForegroundColor Green
+    Write-Host "AEIS-K restarted: $BackendUrl" -ForegroundColor Green
   }
   "status" {
     Show-AeisStatus
@@ -407,7 +400,7 @@ switch ($Action) {
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     Stop-AeisProcesses
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-    Write-Host "K-L-I-A automatic startup removed." -ForegroundColor Yellow
+    Write-Host "AEIS-K automatic startup removed." -ForegroundColor Yellow
   }
   "logs" {
     Get-Content `

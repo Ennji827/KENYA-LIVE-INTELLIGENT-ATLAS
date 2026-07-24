@@ -7,7 +7,7 @@ import {
   downloadReport,
 } from "../utils/apiClient";
 
-// â”€â”€ Workflow model (mirrors services/reports.py) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Workflow model (mirrors services/reports.py) ────────────────────
 // The backend is the source of truth for what is allowed; we mirror it here
 // purely to decide which buttons to show. Any drift fails safe: the backend
 // rejects the transition and we surface its error.
@@ -92,7 +92,7 @@ function StatusBadge({ status }) {
   );
 }
 
-// â”€â”€ Generate-report modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Generate-report modal ───────────────────────────────────────────
 function GenerateModal({ onClose, onCreated }) {
   const [title, setTitle] = useState("");
   const [scopeLevel, setScopeLevel] = useState("national");
@@ -129,7 +129,7 @@ function GenerateModal({ onClose, onCreated }) {
             <h3>Generate a report</h3>
           </div>
           <button type="button" className="modal__close" onClick={onClose} aria-label="Close">
-            âœ•
+            ✕
           </button>
         </div>
 
@@ -182,7 +182,7 @@ function GenerateModal({ onClose, onCreated }) {
               Cancel
             </button>
             <button type="submit" className="btn" disabled={busy}>
-              {busy ? "Generatingâ€¦" : "Generate report"}
+              {busy ? "Generating…" : "Generate report"}
             </button>
           </div>
         </form>
@@ -191,7 +191,7 @@ function GenerateModal({ onClose, onCreated }) {
   );
 }
 
-// â”€â”€ Report detail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Report detail ───────────────────────────────────────────────────
 function ReportDetail({ report, role, onBack, onChanged }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -231,7 +231,7 @@ function ReportDetail({ report, role, onBack, onChanged }) {
   return (
     <div className="report-detail">
       <button type="button" className="reports__back" onClick={onBack}>
-        â† All reports
+        ← All reports
       </button>
 
       <header className="report-detail__head panel">
@@ -240,8 +240,8 @@ function ReportDetail({ report, role, onBack, onChanged }) {
           <h1>{report.title}</h1>
           <p className="report-detail__meta">
             {titleCase(report.scope_level)}
-            {report.scope_name ? ` Â· ${report.scope_name}` : ""} Â· Confidence:{" "}
-            {report.confidence} Â· By {report.generated_by} Â·{" "}
+            {report.scope_name ? ` · ${report.scope_name}` : ""} · Confidence:{" "}
+            {report.confidence} · By {report.generated_by} ·{" "}
             {new Date(report.updated_at).toLocaleString()}
           </p>
         </div>
@@ -255,7 +255,7 @@ function ReportDetail({ report, role, onBack, onChanged }) {
               onClick={() => doExport(f.key)}
               disabled={busy === `export:${f.key}`}
             >
-              {busy === `export:${f.key}` ? "â€¦" : `â†“ ${f.label}`}
+              {busy === `export:${f.key}` ? "…" : `↓ ${f.label}`}
             </button>
           ))}
         </div>
@@ -283,7 +283,7 @@ function ReportDetail({ report, role, onBack, onChanged }) {
                     onClick={() => doTransition(t)}
                     disabled={!!busy}
                   >
-                    {busy === t ? "Workingâ€¦" : transitionLabel(report.status, t)}
+                    {busy === t ? "Working…" : transitionLabel(report.status, t)}
                   </button>
                 ))}
               </div>
@@ -322,13 +322,13 @@ function ReportDetail({ report, role, onBack, onChanged }) {
               <li key={i}>
                 <strong>{titleCase(ev.action)}</strong>
                 {ev.from_status && ev.to_status
-                  ? ` Â· ${STATUS_LABEL[ev.from_status] || ev.from_status} â†’ ${
+                  ? ` · ${STATUS_LABEL[ev.from_status] || ev.from_status} → ${
                       STATUS_LABEL[ev.to_status] || ev.to_status
                     }`
                   : ev.to_status
-                    ? ` Â· ${STATUS_LABEL[ev.to_status] || ev.to_status}`
+                    ? ` · ${STATUS_LABEL[ev.to_status] || ev.to_status}`
                     : ""}
-                {ev.actor ? ` Â· ${ev.actor}` : ""}
+                {ev.actor ? ` · ${ev.actor}` : ""}
                 <span className="report-audit__time">
                   {new Date(ev.created_at).toLocaleString()}
                 </span>
@@ -342,7 +342,7 @@ function ReportDetail({ report, role, onBack, onChanged }) {
   );
 }
 
-// â”€â”€ Reports workspace (list + detail) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Reports workspace (list + detail) ───────────────────────────────
 export default function ReportsWorkspace({ user }) {
   const perms = user?.permissions || [];
   const role = user?.role || "";
@@ -422,7 +422,7 @@ export default function ReportsWorkspace({ user }) {
     <div className="reports">
       <header className="reports__hero">
         <div>
-          <div className="reports__eyebrow">K-L-I-A Â· Intelligence Reports</div>
+          <div className="reports__eyebrow">AEIS-K · Intelligence Reports</div>
           <h1>Reports</h1>
           <p>
             Browse, export, and advance AI-generated intelligence reports through
@@ -465,7 +465,7 @@ export default function ReportsWorkspace({ user }) {
             type="search"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search title, type, or areaâ€¦"
+            placeholder="Search title, type, or area…"
           />
           <button type="submit" className="btn btn--ghost">Search</button>
         </form>
@@ -473,7 +473,7 @@ export default function ReportsWorkspace({ user }) {
 
       <div className="panel reports__list">
         {loading || detailLoading ? (
-          <p className="reports__empty">Loading reportsâ€¦</p>
+          <p className="reports__empty">Loading reports…</p>
         ) : error ? (
           <p className="reports__error">{error}</p>
         ) : reports.length === 0 ? (
@@ -499,7 +499,7 @@ export default function ReportsWorkspace({ user }) {
                     </td>
                     <td>
                       {titleCase(r.scope_level)}
-                      {r.scope_name ? ` Â· ${r.scope_name}` : ""}
+                      {r.scope_name ? ` · ${r.scope_name}` : ""}
                     </td>
                     <td><StatusBadge status={r.status} /></td>
                     <td>{r.confidence}</td>
@@ -520,10 +520,10 @@ export default function ReportsWorkspace({ user }) {
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
-            â† Prev
+            ← Prev
           </button>
           <span>
-            Page {pagination.page} of {pagination.pages} Â· {pagination.total} reports
+            Page {pagination.page} of {pagination.pages} · {pagination.total} reports
           </span>
           <button
             type="button"
@@ -531,7 +531,7 @@ export default function ReportsWorkspace({ user }) {
             disabled={page >= pagination.pages}
             onClick={() => setPage((p) => p + 1)}
           >
-            Next â†’
+            Next →
           </button>
         </div>
       )}

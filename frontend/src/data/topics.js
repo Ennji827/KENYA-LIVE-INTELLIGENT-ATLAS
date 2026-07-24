@@ -1,4 +1,4 @@
-// K-L-I-A Intelligence topics.
+// AEIS-K Intelligence topics.
 //
 // This is the data backbone of the intelligence system. It defines the eight
 // intelligence topics and produces a *scaffolded* distribution for every region
@@ -40,7 +40,7 @@ export const TOPICS = [
   {
     id: "rainfall",
     label: "Rainfall",
-    icon: "ðŸŒ§ï¸",
+    icon: "🌧️",
     category: "Climate",
     unit: "mm/yr",
     metricLabel: "Annual rainfall",
@@ -58,9 +58,9 @@ export const TOPICS = [
   {
     id: "weather",
     label: "Weather",
-    icon: "â›…",
+    icon: "⛅",
     category: "Climate",
-    unit: "Â°C",
+    unit: "°C",
     metricLabel: "Mean temperature",
     aggregation: "avg",
     decimals: 1,
@@ -69,14 +69,14 @@ export const TOPICS = [
     ramp: ["#e0f2fe", "#ea580c"],
     higherIsBetter: null,
     description:
-      "Near-real-time weather conditions â€” temperature, humidity, and short-range forecast signals across the country.",
+      "Near-real-time weather conditions — temperature, humidity, and short-range forecast signals across the country.",
     liveHint:
       "Back with the live Open-Meteo forecast feed (already connected for county pages).",
   },
   {
     id: "farmland",
     label: "Farm Land",
-    icon: "ðŸŒ¾",
+    icon: "🌾",
     category: "Land use",
     unit: "% of land",
     metricLabel: "Cultivated land share",
@@ -93,7 +93,7 @@ export const TOPICS = [
   {
     id: "forests",
     label: "Forests",
-    icon: "ðŸŒ³",
+    icon: "🌳",
     category: "Environment",
     unit: "% cover",
     metricLabel: "Forest cover",
@@ -104,16 +104,16 @@ export const TOPICS = [
     ramp: ["#f0fdf4", "#15803d"],
     higherIsBetter: true,
     description:
-      "Natural and planted forest cover combined â€” indigenous canopy plus plantation and reforestation, a measure of biodiversity, carbon stock, and restoration.",
+      "Natural and planted forest cover combined — indigenous canopy plus plantation and reforestation, a measure of biodiversity, carbon stock, and restoration.",
     liveHint:
       "Connect canopy / land-cover remote sensing and the forestry plantation registry.",
   },
   {
     id: "water_bodies",
     label: "Water Bodies",
-    icon: "ðŸ’§",
+    icon: "💧",
     category: "Environment",
-    unit: "kmÂ²",
+    unit: "km²",
     metricLabel: "Surface water area",
     aggregation: "sum",
     decimals: 0,
@@ -122,15 +122,15 @@ export const TOPICS = [
     ramp: ["#ecfeff", "#0e7490"],
     higherIsBetter: null,
     description:
-      "Lakes, rivers, dams, and wetlands â€” surface water availability and hydrological assets.",
+      "Lakes, rivers, dams, and wetlands — surface water availability and hydrological assets.",
     liveHint: "Connect a surface-water extent source (e.g. JRC / Sentinel).",
   },
   {
     id: "roads",
     label: "Roads",
-    icon: "ðŸ›£ï¸",
+    icon: "🛣️",
     category: "Infrastructure",
-    unit: "km/1000 kmÂ²",
+    unit: "km/1000 km²",
     metricLabel: "Road density",
     aggregation: "avg",
     decimals: 0,
@@ -139,13 +139,13 @@ export const TOPICS = [
     ramp: ["#fafaf9", "#57534e"],
     higherIsBetter: true,
     description:
-      "Density of the classified road network â€” a proxy for connectivity and access to markets and services.",
+      "Density of the classified road network — a proxy for connectivity and access to markets and services.",
     liveHint: "Connect the roads authority network dataset or OSM extract.",
   },
   {
     id: "electricity",
     label: "Electricity",
-    icon: "âš¡",
+    icon: "⚡",
     category: "Infrastructure",
     unit: "% connected",
     metricLabel: "Electrification rate",
@@ -162,7 +162,7 @@ export const TOPICS = [
   {
     id: "households",
     label: "Households",
-    icon: "ðŸ ",
+    icon: "🏠",
     category: "Population",
     unit: "households",
     metricLabel: "Number of households",
@@ -173,7 +173,7 @@ export const TOPICS = [
     ramp: ["#faf5ff", "#7e22ce"],
     higherIsBetter: null,
     description:
-      "Distribution of households â€” the denominator for service delivery, planning, and per-capita analysis.",
+      "Distribution of households — the denominator for service delivery, planning, and per-capita analysis.",
     liveHint: "Connect the national census / civil registration household counts.",
   },
 ];
@@ -228,7 +228,7 @@ export function nationalValue(topicId) {
 // Format a value with the topic's unit for display.
 export function formatValue(topicId, value) {
   const topic = topicById[topicId];
-  if (topic == null || value == null || Number.isNaN(value)) return "â€”";
+  if (topic == null || value == null || Number.isNaN(value)) return "—";
   const rounded = Number(value).toLocaleString(undefined, {
     maximumFractionDigits: topic.decimals,
   });
@@ -265,4 +265,4 @@ function parseHex(hex) {
 
 // Every scaffolded topic reports this until a live source is wired in.
 export const SOURCE_STATUS = "scaffolded";
-export const SOURCE_STATUS_LABEL = "Scaffolded Â· awaiting verified source";
+export const SOURCE_STATUS_LABEL = "Scaffolded · awaiting verified source";

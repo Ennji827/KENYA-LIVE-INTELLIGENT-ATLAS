@@ -5,7 +5,7 @@
 import { kenyaCountyNames } from "../data/kenyaCountyCatalog";
 
 const COUNTIES_URL = "/data/counties.geojson";
-const SUBCOUNTIES_URL = "/data/sub_counties.geojson";
+const SUBCOUNTIES_URL = "/data/sub_Counties.geojson";
 // Ward boundaries, enriched with parent ADM1_EN/ADM2_EN/ADM3_EN by
 // scripts/enrich-wards.mjs (the raw source carries only shapeName).
 const WARDS_URL = "/data/wards.geojson";

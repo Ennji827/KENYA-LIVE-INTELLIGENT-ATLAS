@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""K-L-I-A Django management entrypoint."""
+"""AEIS-K Django management entrypoint."""
 import os
 import sys
 from pathlib import Path

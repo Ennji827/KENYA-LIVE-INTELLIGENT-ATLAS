@@ -142,7 +142,7 @@ export const kenyaCounties = kenyaCountyNames.map((name, index) => {
 });
 
 export const nationalSummary = {
-  title: "K-L-I-A Intelligence Dashboard",
+  title: "AEIS-K Intelligence Dashboard",
   subtitle: "Climate, Water and Land Intelligence System for Kenya",
   registeredFarms: null,
   totalMappedAreaHa: null,

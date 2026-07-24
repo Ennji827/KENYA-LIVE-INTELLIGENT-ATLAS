@@ -1,4 +1,4 @@
-// Centralized K-L-I-A backend API client.
+// Centralized AEIS-K backend API client.
 //
 // The topic-centric UI previously talked to only a handful of endpoints
 // (auth, payments, intelligence/query). This module wires up every backend
@@ -8,7 +8,7 @@
 //
 // Auth: protected endpoints expect `Authorization: Bearer <token>`. The public
 // portal stores its session (including `token`) under `aeis_auth_session`
-// (see AuthGateway). We attach that token to every request when present â€”
+// (see AuthGateway). We attach that token to every request when present —
 // harmless for public endpoints, required for protected ones.
 //
 // Every helper returns the parsed JSON body and throws an Error (with `.status`
@@ -62,14 +62,14 @@ async function request(path, { method = "GET", body, query, signal } = {}) {
 
 const enc = encodeURIComponent;
 
-// â”€â”€ Metadata & system â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Metadata & system ────────────────────────────────────────────
 export const fetchMetadata = () => request("/api/metadata");
 export const fetchSystemAccess = () => request("/api/system/access");
 export const fetchSystemActualization = () => request("/api/system/actualization");
 export const updatePublicAccess = (body) =>
   request("/api/system/public-access", { method: "POST", body });
 
-// â”€â”€ Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Dashboard ────────────────────────────────────────────────────
 export const fetchDashboardSummary = () => request("/api/dashboard/summary");
 export const fetchDashboardRealtime = (county) =>
   request("/api/dashboard/realtime", { query: { county } });
@@ -78,12 +78,12 @@ export const fetchDashboardCounty = (identifier) =>
 export const fetchDashboardAlerts = () => request("/api/dashboard/alerts"); // protected
 export const fetchDashboardReports = () => request("/api/dashboard/reports"); // protected
 
-// â”€â”€ Weather â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// No county â†’ national forecast summary; with county â†’ live county forecast.
+// ── Weather ──────────────────────────────────────────────────────
+// No county → national forecast summary; with county → live county forecast.
 export const fetchWeatherForecast = (county) =>
   request("/api/weather/forecast", { query: { county } });
 
-// â”€â”€ Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Analysis ─────────────────────────────────────────────────────
 export const fetchCountryAnalysis = () => request("/api/analysis/country");
 export const fetchCountyAnalysis = (identifier) =>
   request(`/api/analysis/county/${enc(identifier)}`);
@@ -99,7 +99,7 @@ export const fetchAutomationStatus = () => request("/api/automation/status");
 export const fetchSegmentation = (segmentClass, { level = "county", id, limit } = {}) =>
   request(`/api/segmentation/${enc(segmentClass)}`, { query: { level, id, limit } });
 
-// â”€â”€ Data catalog, assets & imagery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Data catalog, assets & imagery ───────────────────────────────
 export const fetchDataSources = () => request("/api/data/sources");
 export const registerDataSource = (body) =>
   request("/api/data/sources", { method: "POST", body }); // ministry only
@@ -114,11 +114,11 @@ export const fetchSentinel2 = (query) =>
 export const fetchLandsatLatest = (query) =>
   request("/api/data/imagery/landsat/latest", { query });
 
-// â”€â”€ GEE layers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── GEE layers ───────────────────────────────────────────────────
 export const fetchGeeLayers = () => request("/api/gee/layers");
 
-// â”€â”€ Live topic metrics from OpenStreetMap (roads / forests / water_bodies) â”€â”€
-// No county â†’ national per-county aggregate; with county â†’ that county only.
+// ── Live topic metrics from OpenStreetMap (roads / forests / water_bodies) ──
+// No county → national per-county aggregate; with county → that county only.
 export const fetchOsmMetric = (topic, county) =>
   request(`/api/osm/metric/${enc(topic)}`, { query: { county } });
 
@@ -139,12 +139,12 @@ export const fetchIntelligenceInsights = (limit = 20) =>
 export const postIntelligenceQuery = (body) =>
   request("/api/intelligence/query", { method: "POST", body }); // protected + permission
 
-// â”€â”€ Reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Reports ──────────────────────────────────────────────────────
 export const fetchReports = (query) => request("/api/reports", { query }); // protected (report_read)
 export const fetchReport = (reportId) => request(`/api/reports/${reportId}`); // protected
 export const createReport = (body) =>
   request("/api/reports", { method: "POST", body }); // protected (report_generate)
-// Move a report along its workflow (draft â†’ reviewed â†’ approved â†’ published).
+// Move a report along its workflow (draft → reviewed → approved → published).
 // Role enforcement lives on the backend; the client mirrors it for button gating.
 export const transitionReport = (reportId, status, note = "") =>
   request(`/api/reports/${reportId}/transition`, { method: "POST", body: { status, note } });
@@ -173,7 +173,7 @@ export async function downloadReport(reportId, exportFormat) {
   return { blob: await res.blob(), filename: `aeis-report-${reportId}.${exportFormat}` };
 }
 
-// â”€â”€ Field reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Field reports ────────────────────────────────────────────────
 export const fetchFieldReports = (query) =>
   request("/api/field-reports", { query }); // protected
 export const submitFieldReport = (body) =>
@@ -181,7 +181,7 @@ export const submitFieldReport = (body) =>
 export const verifyFieldReport = (reportId, body) =>
   request(`/api/field-reports/${reportId}/verify`, { method: "POST", body }); // protected
 
-// â”€â”€ Processing jobs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Processing jobs ──────────────────────────────────────────────
 export const fetchJobs = () => request("/api/jobs"); // protected
 export const fetchJob = (jobId) => request(`/api/jobs/${jobId}`);
 
@@ -200,13 +200,13 @@ export async function waitForJob(jobId, { onProgress, timeoutMs = 180_000, inter
   throw new Error("Processing is still running. It remains queued and can be checked again.");
 }
 
-// â”€â”€ Users (staff admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Users (staff admin) ──────────────────────────────────────────
 export const fetchUsers = () => request("/api/users"); // protected
 export const createUser = (body) => request("/api/users", { method: "POST", body });
 export const updateUser = (userId, body) =>
   request(`/api/users/${userId}`, { method: "PATCH", body });
 
-// â”€â”€ Staff authentication & governance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Staff authentication & governance ────────────────────────────
 export const countyLogin = (body) =>
   request("/api/auth/county-login", { method: "POST", body });
 export const nationalLogin = (body) =>
@@ -221,17 +221,7 @@ export const fetchAccessModel = () => request("/api/auth/access-model");
 export const fetchAuditLog = (limit) =>
   request("/api/auth/audit-log", { query: { limit } });
 
-// â”€â”€ Boundaries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Boundaries ───────────────────────────────────────────────────
 export const fetchBoundaryCounties = () => request("/api/boundary/counties");
 export const fetchBoundaryCounty = (identifier) =>
   request(`/api/boundary/county/${enc(identifier)}`);
-export const fetchBoundaryCountiesGeoJson = () =>
-  request("/api/boundary/counties.geojson");
-export const fetchBoundarySubcounties = (county) =>
-  request("/api/boundary/subcounties", { query: county ? { county } : undefined });
-export const fetchBoundarySubcounty = (identifier) =>
-  request(`/api/boundary/subcounty/${enc(identifier)}`);
-export const fetchBoundaryWards = ({ county, subcounty } = {}) =>
-  request("/api/boundary/wards", { query: { county, subcounty } });
-export const fetchBoundaryWard = (identifier) =>
-  request(`/api/boundary/ward/${enc(identifier)}`);

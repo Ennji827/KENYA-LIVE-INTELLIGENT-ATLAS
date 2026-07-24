@@ -11,8 +11,8 @@ export default function AreaSelect({ topicId, onConfirm, onCancel }) {
   const [mode, setMode] = useState("national"); // "national" | "county"
   const [county, setCounty] = useState("");
   const [subcounty, setSubcounty] = useState("");
-  const [ward, setWard] = useState("");
   const [subcounties, setSubcounties] = useState([]);
+  const [ward, setWard] = useState("");
   const [wards, setWards] = useState([]);
 
   useEffect(() => {
@@ -20,16 +20,12 @@ export default function AreaSelect({ topicId, onConfirm, onCancel }) {
     if (!county) {
       setSubcounties([]);
       setSubcounty("");
-      setWards([]);
-      setWard("");
       return;
     }
     listSubcounties(county).then((list) => {
       if (!cancelled) setSubcounties(list);
     });
     setSubcounty("");
-    setWards([]);
-    setWard("");
     return () => {
       cancelled = true;
     };
