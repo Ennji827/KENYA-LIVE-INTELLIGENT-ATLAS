@@ -1,12 +1,8 @@
 import React from "react";
 
-// AEIS-K brand mark (matches the landing footer/logo).
-const BrandLogo = (props) => (
-  <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden="true" {...props}>
-    <rect width="32" height="32" fill="#0f4c81" />
-    <path d="M8 22 L16 10 L24 22" stroke="#4ade80" strokeWidth="2.5" strokeLinejoin="round" fill="none" />
-    <circle cx="16" cy="10" r="2" fill="#4ade80" />
-  </svg>
+// Kenya Live Atlas abbreviation mark (matches the landing footer/logo).
+const BrandLogo = () => (
+  <span className="brand-abbr" aria-hidden="true">KLA</span>
 );
 
 // Shared, branded top bar. Used on the landing "home" page and across the
@@ -34,10 +30,10 @@ export default function SiteHeader({
           type="button"
           className="site-header__brand"
           onClick={onHome}
-          aria-label="AEIS-K home"
+          aria-label="Kenya Live Atlas home"
         >
           <BrandLogo />
-          <span className="site-header__name">AEIS-K</span>
+          <span className="site-header__name">KENYA LIVE ATLAS</span>
         </button>
 
         <div className="site-header__actions">

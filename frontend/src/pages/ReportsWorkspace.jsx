@@ -422,7 +422,7 @@ export default function ReportsWorkspace({ user }) {
     <div className="reports">
       <header className="reports__hero">
         <div>
-          <div className="reports__eyebrow">AEIS-K · Intelligence Reports</div>
+          <div className="reports__eyebrow">KENYA LIVE ATLAS · Intelligence Reports</div>
           <h1>Reports</h1>
           <p>
             Browse, export, and advance AI-generated intelligence reports through

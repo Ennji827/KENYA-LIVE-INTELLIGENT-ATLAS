@@ -124,7 +124,7 @@ def _request_overpass(query: str) -> dict:
             data=body,
             headers={
                 "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
-                "User-Agent": "AEIS-K/0.1 topic metrics (OpenStreetMap)",
+                "User-Agent": "KenyaLiveAtlas/0.1 topic metrics (OpenStreetMap)",
             },
             method="POST",
         )

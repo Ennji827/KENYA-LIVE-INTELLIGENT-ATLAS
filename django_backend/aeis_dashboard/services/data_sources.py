@@ -409,7 +409,7 @@ def source_catalog() -> dict:
             source_payload["access"] = "connected"
             source_payload["latest_available"] = max(latest_candidates).isoformat() if latest_candidates else None
             source_payload["description"] = (
-                f"{source['description']} AEIS-K has {count} reviewed observation(s) "
+                f"{source['description']} Kenya Live Atlas has {count} reviewed observation(s) "
                 "imported from this source."
             )
         builtin_sources.append(source_payload)
@@ -572,7 +572,7 @@ def nasa_power_history(query) -> dict:
     payload = cache.get(cache_key)
     if payload is None:
         try:
-            request = Request(url, headers={"User-Agent": "AEIS-K/1.0 historical climate connector"})
+            request = Request(url, headers={"User-Agent": "KenyaLiveAtlas/1.0 historical climate connector"})
             with urlopen(request, timeout=30) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
@@ -875,7 +875,7 @@ def _console_readiness(
         "county": {
             "status": "live" if has_monthly else "source_required",
             "metric": "Monthly county/national climate profile",
-            "source": "NASA POWER plus AEIS-K county boundaries",
+            "source": "NASA POWER plus Kenya Live Atlas county boundaries",
             "note": f"{scope_text.title()} monthly context is available for decision briefs.",
         },
     }
@@ -1082,12 +1082,12 @@ def monthly_intelligence(query) -> dict:
             if open_records:
                 source_label = "Reviewed local monthly records + NASA POWER fallback"
                 provider = "Reviewed local records + NASA POWER fallback"
-                source = "AEIS-K verified monthly observation store and NASA Langley Research Center"
+                source = "Kenya Live Atlas verified monthly observation store and NASA Langley Research Center"
                 rainfall_status = "mixed_source_backed"
             else:
                 source_label = "; ".join(local_meta.get("source_names")[:3]) or "Reviewed local monthly climate records"
                 provider = "Reviewed local monthly climate records"
-                source = "AEIS-K verified monthly observation store"
+                source = "Kenya Live Atlas verified monthly observation store"
                 rainfall_status = "official_reviewed"
             aggregation = {
                 "method": "reviewed monthly county observations with open fallback for missing county-months"
@@ -1096,7 +1096,7 @@ def monthly_intelligence(query) -> dict:
                 "county_count": 1,
                 "official_record_count": len(local_records),
                 "open_fallback_record_count": len(open_records),
-                "warning": "Rainfall and climate values come from reviewed imported records. Water, vegetation, forest, and soil metrics shown from these records are AEIS-K proxy indices, not direct raster measurements.",
+                "warning": "Rainfall and climate values come from reviewed imported records. Water, vegetation, forest, and soil metrics shown from these records are Kenya Live Atlas proxy indices, not direct raster measurements.",
             }
         elif use_open_fallback:
             history = nasa_power_history({**common_query, "county": county})
@@ -1163,12 +1163,12 @@ def monthly_intelligence(query) -> dict:
         has_fallback = bool(fallback_counties_used)
         if has_local and has_fallback:
             provider = "Reviewed local records + NASA POWER fallback"
-            source = "AEIS-K verified monthly observation store and NASA Langley Research Center"
+            source = "Kenya Live Atlas verified monthly observation store and NASA Langley Research Center"
             source_label = "Reviewed local monthly records + NASA POWER fallback"
             rainfall_status = "mixed_source_backed"
         elif has_local:
             provider = "Reviewed local monthly climate records"
-            source = "AEIS-K verified monthly observation store"
+            source = "Kenya Live Atlas verified monthly observation store"
             source_label = "; ".join(local_meta.get("source_names")[:3]) or "Reviewed local monthly climate records"
             rainfall_status = "official_reviewed"
         else:
@@ -1217,10 +1217,10 @@ def monthly_intelligence(query) -> dict:
             "temperature_c": "Monthly mean 2 m air temperature.",
             "humidity_pct": "Monthly mean relative humidity.",
             "wind_ms": "Monthly mean wind speed.",
-            "water_pressure_index": "AEIS-K proxy from monthly rainfall, humidity, and temperature.",
-            "vegetation_support_index": "AEIS-K proxy from monthly rainfall and temperature.",
-            "soil_moisture_proxy": "AEIS-K proxy from monthly rainfall, humidity, and temperature.",
-            "dryness_pressure_index": "AEIS-K proxy from monthly water pressure, heat, and wind.",
+            "water_pressure_index": "Kenya Live Atlas proxy from monthly rainfall, humidity, and temperature.",
+            "vegetation_support_index": "Kenya Live Atlas proxy from monthly rainfall and temperature.",
+            "soil_moisture_proxy": "Kenya Live Atlas proxy from monthly rainfall, humidity, and temperature.",
+            "dryness_pressure_index": "Kenya Live Atlas proxy from monthly water pressure, heat, and wind.",
         },
         "aggregation": aggregation,
         "records": records,
@@ -1233,7 +1233,7 @@ def monthly_intelligence(query) -> dict:
         "source_urls": source_urls[:5],
         "source_error_count": len(source_errors),
         "source_errors": source_errors[:12],
-        "source_note": "All displayed monthly values are source-backed. AEIS-K prefers reviewed Kenya-local KMD/KALRO/KNBS-style imports when present and uses NASA POWER only as a real open-source fallback. Water extent, NDVI/NDWI, forest cover, land-use shares, and road lengths remain source-gated until raster/vector zonal processing is connected.",
+        "source_note": "All displayed monthly values are source-backed. Kenya Live Atlas prefers reviewed Kenya-local KMD/KALRO/KNBS-style imports when present and uses NASA POWER only as a real open-source fallback. Water extent, NDVI/NDWI, forest cover, land-use shares, and road lengths remain source-gated until raster/vector zonal processing is connected.",
         "generated_at": domain.now_iso(),
     }
     cache.set(cache_key, payload, 12 * 60 * 60)
@@ -1321,7 +1321,7 @@ def environmental_metrics_summary(start: date, end: date, county: str | None = N
         ).order_by("category")
     ]
     return {
-        "provider": "AEIS-K reviewed environmental metric store",
+        "provider": "Kenya Live Atlas reviewed environmental metric store",
         "scope": scope,
         "scope_name": scope_name,
         "requested_start": start.isoformat(),
@@ -1469,7 +1469,7 @@ def _field_report_event(row: FieldReport) -> dict:
         "ward": row.ward_name,
         "status": row.verification_status,
         "detail": row.observations[:260],
-        "source": "AEIS-K field report",
+        "source": "Kenya Live Atlas field report",
     }
 
 
@@ -1482,7 +1482,7 @@ def _alert_event(row: Alert) -> dict:
         "status": row.status,
         "severity": row.severity,
         "detail": row.description[:260],
-        "source": ", ".join(row.data_sources[:2]) if row.data_sources else "AEIS-K operational alert",
+        "source": ", ".join(row.data_sources[:2]) if row.data_sources else "Kenya Live Atlas operational alert",
     }
 
 
@@ -1495,7 +1495,7 @@ def _report_event(row: IntelligenceReport) -> dict:
         "status": row.status,
         "severity": row.risk_level,
         "detail": (row.ai_summary or str((row.content or {}).get("executive_summary") or ""))[:260],
-        "source": "AEIS-K intelligence report",
+        "source": "Kenya Live Atlas intelligence report",
     }
 
 
@@ -1509,7 +1509,7 @@ def _asset_event(row: DataAsset) -> dict:
         "status": row.status,
         "severity": getattr(quality, "confidence", ""),
         "detail": f"{row.asset_type} {row.file_format} asset; {row.feature_count or 'metadata'} feature count.",
-        "source": getattr(quality, "source_name", "") or "AEIS-K data asset",
+        "source": getattr(quality, "source_name", "") or "Kenya Live Atlas data asset",
     }
 
 
@@ -1642,7 +1642,7 @@ def research_context(query) -> dict:
             },
         },
         "source_note": (
-            "Research context combines official boundary files with AEIS-K alerts, reports, field reports, data assets, "
+            "Research context combines official boundary files with Kenya Live Atlas alerts, reports, field reports, data assets, "
             "reviewed monthly climate records, and imported environmental metrics. Empty sub-county or ward records are "
             "shown as boundary-ready/source-required rather than filled with invented events."
         ),
@@ -1688,7 +1688,7 @@ def sentinel_2_search(query) -> dict:
                 COPERNICUS_STAC_SEARCH_URL,
                 data=encoded,
                 method="POST",
-                headers={"Content-Type": "application/json", "User-Agent": "AEIS-K/1.0 imagery catalogue"},
+                headers={"Content-Type": "application/json", "User-Agent": "KenyaLiveAtlas/1.0 imagery catalogue"},
             )
             with urlopen(request, timeout=30) as response:
                 payload = json.loads(response.read().decode("utf-8"))
@@ -1788,7 +1788,7 @@ def landsat_latest(query) -> dict:
                     LANDSAT_STAC_SEARCH_URL,
                     data=encoded,
                     method="POST",
-                    headers={"Content-Type": "application/json", "User-Agent": "AEIS-K/1.0 Landsat latest scene"},
+                    headers={"Content-Type": "application/json", "User-Agent": "KenyaLiveAtlas/1.0 Landsat latest scene"},
                 )
                 with urlopen(request, timeout=30) as response:
                     payload = json.loads(response.read().decode("utf-8"))
@@ -1906,7 +1906,7 @@ def soilgrids_point(query) -> dict:
         try:
             request = Request(
                 f"{SOILGRIDS_PROPERTIES_URL}?{encoded}",
-                headers={"User-Agent": "AEIS-K/1.0 SoilGrids point connector"},
+                headers={"User-Agent": "KenyaLiveAtlas/1.0 SoilGrids point connector"},
             )
             with urlopen(request, timeout=12) as response:
                 payload = json.loads(response.read().decode("utf-8"))

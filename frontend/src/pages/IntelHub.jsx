@@ -51,7 +51,7 @@ export default function IntelHub({ onOpenTopic }) {
   return (
     <div className="hub">
       <header className="hub__hero">
-        <div className="hub__eyebrow">AEIS-K · Critical Intelligence System</div>
+        <div className="hub__eyebrow">KENYA LIVE ATLAS · Critical Intelligence System</div>
         <h1>National Intelligence Hub</h1>
         <p>
           Live geospatial intelligence for decision makers and researchers.

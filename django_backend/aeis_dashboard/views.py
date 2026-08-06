@@ -100,7 +100,7 @@ def payments_stk_push(request: HttpRequest) -> JsonResponse:
     if not phone:
         return api_json({"error": "A phone number is required."}, status=400)
     account_ref = str(payload.get("account_ref") or "").strip() or payments.account_reference()
-    description = str(payload.get("description") or "AEIS-K intelligence report").strip()
+    description = str(payload.get("description") or "Kenya Live Atlas intelligence report").strip()
     try:
         result = payments.initiate_stk(phone=phone, account_ref=account_ref, description=description)
     except payments.PaymentError as exc:
@@ -161,7 +161,7 @@ def frontend_index(request: HttpRequest) -> HttpResponse:
         return file_response(index_path)
     return api_json(
         {
-            "project": "AEIS-K",
+            "project": "Kenya Live Atlas",
             "name": "Climate, Water and Land Intelligence System for Kenya",
             "status": "django_ready",
             "message": "Build the React frontend with npm --prefix frontend run build.",
@@ -279,7 +279,7 @@ def dashboard_county(request: HttpRequest, identifier: str) -> JsonResponse:
 def dashboard_alerts(request: HttpRequest) -> JsonResponse:
     session = protected_session(request)
     if not session:
-        return api_json({"error": "An active AEIS-K session is required."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required."}, status=403)
     queryset = Alert.objects.exclude(status=Alert.Status.RESOLVED)
     if session.user.role in {
         AEISUser.Role.COUNTY,
@@ -309,7 +309,7 @@ def dashboard_alerts(request: HttpRequest) -> JsonResponse:
 def dashboard_reports(request: HttpRequest) -> JsonResponse:
     session = protected_session(request)
     if not session:
-        return api_json({"error": "An active AEIS-K session is required."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required."}, status=403)
     queryset = reports.scoped_reports(session.user)
     return api_json(
         {
@@ -415,7 +415,7 @@ def data_catalog(request: HttpRequest) -> JsonResponse:
 @require_http_methods(["GET", "OPTIONS"])
 def data_assets(request: HttpRequest) -> JsonResponse:
     if not auth.active_session(request_token(request)):
-        return api_json({"error": "An active AEIS-K session is required to list GIS assets."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required to list GIS assets."}, status=403)
     try:
         limit = int(request.GET.get("limit", "100"))
     except ValueError:
@@ -442,7 +442,7 @@ def data_asset_upload(request: HttpRequest) -> JsonResponse:
 def data_asset_download(request: HttpRequest, asset_id) -> HttpResponse:
     session = auth.active_session(request_token(request))
     if not session:
-        return api_json({"error": "An active AEIS-K session is required to download GIS data."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required to download GIS data."}, status=403)
     try:
         asset = data_sources.DataAsset.objects.get(pk=asset_id)
     except data_sources.DataAsset.DoesNotExist:
@@ -455,7 +455,7 @@ def data_asset_download(request: HttpRequest, asset_id) -> HttpResponse:
 @require_http_methods(["GET", "OPTIONS"])
 def nasa_power_history(request: HttpRequest) -> JsonResponse:
     if not auth.active_session(request_token(request)):
-        return api_json({"error": "An active AEIS-K session is required to query historical data."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required to query historical data."}, status=403)
     try:
         return api_json(data_sources.nasa_power_history(request.GET))
     except data_sources.DataSourceError as exc:
@@ -465,7 +465,7 @@ def nasa_power_history(request: HttpRequest) -> JsonResponse:
 @require_http_methods(["GET", "OPTIONS"])
 def monthly_intelligence(request: HttpRequest) -> JsonResponse:
     if not auth.active_session(request_token(request)):
-        return api_json({"error": "An active AEIS-K session is required to query monthly intelligence data."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required to query monthly intelligence data."}, status=403)
     try:
         return api_json(data_sources.monthly_intelligence(request.GET))
     except data_sources.DataSourceError as exc:
@@ -475,7 +475,7 @@ def monthly_intelligence(request: HttpRequest) -> JsonResponse:
 @require_http_methods(["GET", "OPTIONS"])
 def environmental_metrics(request: HttpRequest) -> JsonResponse:
     if not auth.active_session(request_token(request)):
-        return api_json({"error": "An active AEIS-K session is required to query source-backed environmental metrics."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required to query source-backed environmental metrics."}, status=403)
     try:
         return api_json(data_sources.environmental_metrics(request.GET))
     except data_sources.DataSourceError as exc:
@@ -485,7 +485,7 @@ def environmental_metrics(request: HttpRequest) -> JsonResponse:
 @require_http_methods(["GET", "OPTIONS"])
 def research_context(request: HttpRequest) -> JsonResponse:
     if not auth.active_session(request_token(request)):
-        return api_json({"error": "An active AEIS-K session is required to query research context."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required to query research context."}, status=403)
     try:
         return api_json(data_sources.research_context(request.GET))
     except data_sources.DataSourceError as exc:
@@ -495,7 +495,7 @@ def research_context(request: HttpRequest) -> JsonResponse:
 @require_http_methods(["GET", "OPTIONS"])
 def sentinel_2_search(request: HttpRequest) -> JsonResponse:
     if not auth.active_session(request_token(request)):
-        return api_json({"error": "An active AEIS-K session is required to search imagery."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required to search imagery."}, status=403)
     try:
         return api_json(data_sources.sentinel_2_search(request.GET))
     except data_sources.DataSourceError as exc:
@@ -513,7 +513,7 @@ def landsat_latest(request: HttpRequest) -> JsonResponse:
 @require_http_methods(["GET", "OPTIONS"])
 def soilgrids_point(request: HttpRequest) -> JsonResponse:
     if not auth.active_session(request_token(request)):
-        return api_json({"error": "An active AEIS-K session is required to query SoilGrids."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required to query SoilGrids."}, status=403)
     try:
         return api_json(data_sources.soilgrids_point(request.GET))
     except data_sources.DataSourceError as exc:
@@ -681,7 +681,7 @@ def users_collection(request: HttpRequest) -> JsonResponse:
     payload = request_json(request)
     role = str(payload.get("role") or AEISUser.Role.COUNTY)
     if role not in AEISUser.Role.values:
-        return api_json({"error": "Invalid AEIS-K role."}, status=400)
+        return api_json({"error": "Invalid Kenya Live Atlas role."}, status=400)
     username = str(payload.get("username") or "").strip()
     email = str(payload.get("email") or "").strip().lower()
     password = str(payload.get("password") or "")
@@ -751,10 +751,10 @@ def user_detail(request: HttpRequest, user_id: int) -> JsonResponse:
 def intelligence_status(request: HttpRequest) -> JsonResponse:
     session = protected_session(request)
     if not session:
-        return api_json({"error": "An active AEIS-K session is required."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required."}, status=403)
     return api_json(
         {
-            "assistant": "AEIS-K Intelligence Assistant",
+            "assistant": "Kenya Live Atlas Intelligence Assistant",
             "provider": intelligence.provider_status(),
             "permissions": session.user.role,
             "supported_scopes": ["national", "county", "subcounty", "ward"],
@@ -806,7 +806,7 @@ def session_payload_permissions(session) -> list[str]:
 def intelligence_insights(request: HttpRequest) -> JsonResponse:
     session = protected_session(request)
     if not session:
-        return api_json({"error": "An active AEIS-K session is required."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required."}, status=403)
     try:
         limit = int(request.GET.get("limit", "20"))
     except ValueError:
@@ -826,7 +826,7 @@ def intelligence_reports(request: HttpRequest) -> JsonResponse:
         return api_json({"status": "ok"})
     session = protected_session(request)
     if not session:
-        return api_json({"error": "An active AEIS-K session is required."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required."}, status=403)
     if request.method == "GET":
         if not auth.session_has_permission(session, "report_read") and not auth.session_has_permission(
             session, "report_generate"
@@ -859,7 +859,7 @@ def intelligence_reports(request: HttpRequest) -> JsonResponse:
 def processing_jobs(request: HttpRequest) -> JsonResponse:
     session = protected_session(request)
     if not session:
-        return api_json({"error": "An active AEIS-K session is required."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required."}, status=403)
     try:
         limit = max(1, min(100, int(request.GET.get("limit", "30"))))
     except ValueError:
@@ -885,7 +885,7 @@ def processing_job_detail(request: HttpRequest, job_id) -> JsonResponse:
         return api_json({"status": "ok"})
     session = protected_session(request)
     if not session:
-        return api_json({"error": "An active AEIS-K session is required."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required."}, status=403)
     job = jobs.scoped_jobs(session.user).filter(pk=job_id).first()
     if not job:
         return api_json({"error": "Processing job not found."}, status=404)
@@ -901,7 +901,7 @@ def processing_job_detail(request: HttpRequest, job_id) -> JsonResponse:
 def intelligence_report_detail(request: HttpRequest, report_id: int) -> JsonResponse:
     session = protected_session(request)
     if not session:
-        return api_json({"error": "An active AEIS-K session is required."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required."}, status=403)
     report = reports.scoped_reports(session.user).filter(pk=report_id).first()
     if not report:
         return api_json({"error": "Report not found."}, status=404)
@@ -915,7 +915,7 @@ def intelligence_report_transition(request: HttpRequest, report_id: int) -> Json
         return api_json({"status": "ok"})
     session = protected_session(request)
     if not session:
-        return api_json({"error": "An active AEIS-K session is required."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required."}, status=403)
     payload = request_json(request)
     try:
         report = reports.transition_report(
@@ -933,7 +933,7 @@ def intelligence_report_transition(request: HttpRequest, report_id: int) -> Json
 def intelligence_report_export(request: HttpRequest, report_id: int, export_format: str) -> HttpResponse:
     session = protected_session(request)
     if not session:
-        return api_json({"error": "An active AEIS-K session is required."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required."}, status=403)
     report = reports.scoped_reports(session.user).filter(pk=report_id).first()
     if not report:
         return api_json({"error": "Report not found."}, status=404)
@@ -973,7 +973,7 @@ def operational_alerts(request: HttpRequest) -> JsonResponse:
         return api_json({"status": "ok"})
     session = protected_session(request)
     if not session:
-        return api_json({"error": "An active AEIS-K session is required."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required."}, status=403)
     queryset = Alert.objects.all()
     if session.user.role in {
         AEISUser.Role.COUNTY,
@@ -1028,7 +1028,7 @@ def field_reports(request: HttpRequest) -> JsonResponse:
         return api_json({"status": "ok"})
     session = protected_session(request)
     if not session:
-        return api_json({"error": "An active AEIS-K session is required."}, status=403)
+        return api_json({"error": "An active Kenya Live Atlas session is required."}, status=403)
     queryset = FieldReport.objects.select_related("submitted_by", "verified_by")
     if session.user.role in {
         AEISUser.Role.COUNTY,
@@ -1138,7 +1138,7 @@ def data_quality(request: HttpRequest) -> JsonResponse:
             {
                 "id": str(asset.pk),
                 "name": asset.name,
-                "source_name": getattr(quality, "source_name", "AEIS-K upload"),
+                "source_name": getattr(quality, "source_name", "Kenya Live Atlas upload"),
                 "file_format": asset.file_format,
                 "spatial_coverage": getattr(quality, "spatial_coverage", asset.scope_name),
                 "temporal_coverage": getattr(quality, "temporal_coverage", ""),

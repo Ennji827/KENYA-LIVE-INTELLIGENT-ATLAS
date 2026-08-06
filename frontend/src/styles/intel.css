@@ -503,6 +503,7 @@ body {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
   gap: 18px;
+  align-items: start;
 }
 
 .panel {
@@ -514,10 +515,6 @@ body {
   padding: 16px;
   min-width: 0;
   box-shadow: var(--glass-shadow, none);
-}
-
-.panel--map {
-  grid-row: span 2;
 }
 
 .panel--insight {
@@ -568,78 +565,8 @@ body {
   color: #b91c1c;
 }
 
-/* Ranked list */
-.rank-list {
-  max-height: 300px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.rank-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  background: none;
-  border: none;
-  border-radius: 8px;
-  padding: 7px 8px;
-  cursor: pointer;
-  text-align: left;
-  font-size: 13px;
-}
-
-.rank-row:hover {
-  background: #f1f5f9;
-}
-
-.rank-row--active {
-  background: #e0e7ff;
-}
-
-.rank-idx {
-  width: 22px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-}
-
-.rank-swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  flex: none;
-}
-
-.rank-name {
-  flex: 1;
-  font-weight: 600;
-}
-
-.rank-val {
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  font-weight: 700;
-}
-
 .chart-wrap {
   width: 100%;
-}
-
-/* Clickable chart Y-axis labels (region names) — click to drill/zoom. */
-.chart-axis-tick {
-  font-size: 11px;
-  fill: var(--ink);
-  cursor: pointer;
-  transition: fill 0.12s ease;
-}
-
-.chart-axis-tick:hover {
-  fill: var(--accent, #1d4ed8);
-  font-weight: 700;
-  text-decoration: underline;
 }
 
 /* Insight panel */
@@ -885,9 +812,6 @@ body {
 @media (max-width: 900px) {
   .workspace__grid {
     grid-template-columns: 1fr;
-  }
-  .panel--map {
-    grid-row: auto;
   }
   .topic-map {
     height: 380px;

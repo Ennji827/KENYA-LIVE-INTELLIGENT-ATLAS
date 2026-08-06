@@ -3,7 +3,6 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import math
-import os
 import socket
 import threading
 import time
@@ -15,27 +14,22 @@ from urllib.request import Request, urlopen
 
 from django.core.cache import cache
 
+from aeis_django.env import env, env_flag, env_is_set
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = PROJECT_ROOT / "frontend" / "public" / "data"
 SESSION_SECONDS = 8 * 60 * 60
 
 # Demo/seed passwords. Overridable via environment so deployments can set real
 # credentials without touching code; the literals remain as local-dev fallbacks.
-DEFAULT_COUNTY_PASSWORD = os.environ.get("AEIS_COUNTY_PASSWORD", "county123").strip() or "county123"
-DEFAULT_MINISTRY_PASSWORD = os.environ.get("AEIS_MINISTRY_PASSWORD", "ministry123").strip() or "ministry123"
-DEFAULT_ANALYST_PASSWORD = os.environ.get("AEIS_ANALYST_PASSWORD", "analyst123").strip() or "analyst123"
-DEFAULT_AUDITOR_PASSWORD = os.environ.get("AEIS_AUDITOR_PASSWORD", "auditor123").strip() or "auditor123"
-
-
-def env_flag(name: str, default: bool = False) -> bool:
-    value = os.environ.get(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+DEFAULT_COUNTY_PASSWORD = env("KLA_COUNTY_PASSWORD", "county123").strip() or "county123"
+DEFAULT_MINISTRY_PASSWORD = env("KLA_MINISTRY_PASSWORD", "ministry123").strip() or "ministry123"
+DEFAULT_ANALYST_PASSWORD = env("KLA_ANALYST_PASSWORD", "analyst123").strip() or "analyst123"
+DEFAULT_AUDITOR_PASSWORD = env("KLA_AUDITOR_PASSWORD", "auditor123").strip() or "auditor123"
 
 
 def public_access_mode() -> bool:
-    return env_flag("AEIS_PUBLIC_ACCESS", False)
+    return env_flag("KLA_PUBLIC_ACCESS", False)
 
 
 def get_system_setting(key: str, default: str = "") -> str:
@@ -57,14 +51,14 @@ def public_access_locked() -> bool:
 
 
 def show_demo_credentials() -> bool:
-    if os.environ.get("AEIS_SHOW_DEMO_CREDENTIALS") is not None:
-        return env_flag("AEIS_SHOW_DEMO_CREDENTIALS", False)
+    if env_is_set("KLA_SHOW_DEMO_CREDENTIALS"):
+        return env_flag("KLA_SHOW_DEMO_CREDENTIALS", False)
     return not public_access_locked()
 
 
 def remote_county_demo_enabled() -> bool:
-    if os.environ.get("AEIS_ALLOW_REMOTE_DEMO") is not None:
-        return env_flag("AEIS_ALLOW_REMOTE_DEMO", False)
+    if env_is_set("KLA_ALLOW_REMOTE_DEMO"):
+        return env_flag("KLA_ALLOW_REMOTE_DEMO", False)
     return not public_access_locked()
 
 NATIONAL_AUTH_ACCOUNTS = [
@@ -76,7 +70,7 @@ NATIONAL_AUTH_ACCOUNTS = [
         "role": "ministry",
         "provider": "password",
         "password": DEFAULT_MINISTRY_PASSWORD,
-        "command_center": "AEIS-K National Command Center",
+        "command_center": "Kenya Live Atlas National Command Center",
         "boundary_scope": "national",
         "permissions": [
             "national_command_center",
@@ -94,7 +88,7 @@ NATIONAL_AUTH_ACCOUNTS = [
         "role": "analyst",
         "provider": "password",
         "password": DEFAULT_ANALYST_PASSWORD,
-        "command_center": "AEIS-K National Intelligence Analyst",
+        "command_center": "Kenya Live Atlas National Intelligence Analyst",
         "boundary_scope": "national_read_only",
         "permissions": [
             "all_county_read",
@@ -111,7 +105,7 @@ NATIONAL_AUTH_ACCOUNTS = [
         "role": "auditor",
         "provider": "password",
         "password": DEFAULT_AUDITOR_PASSWORD,
-        "command_center": "AEIS-K National Audit Workspace",
+        "command_center": "Kenya Live Atlas National Audit Workspace",
         "boundary_scope": "national_read_only",
         "permissions": [
             "audit_read",
@@ -185,21 +179,21 @@ _COUNTRY_ANALYSIS_LOCK = threading.Lock()
 GEE_LAYER_CONFIG = {
     "geeNdvi": {
         "label": "GEE Sentinel-2 NDVI",
-        "env": "AEIS_GEE_NDVI_TILE_URL",
+        "env": "KLA_GEE_NDVI_TILE_URL",
         "type": "vegetation",
         "opacity": 0.72,
         "note": "Earth Engine Sentinel-2 NDVI tile URL from image.getMapId(...).tile_fetcher.url_format.",
     },
     "geeNdwi": {
         "label": "GEE Sentinel-2 NDWI",
-        "env": "AEIS_GEE_NDWI_TILE_URL",
+        "env": "KLA_GEE_NDWI_TILE_URL",
         "type": "moisture",
         "opacity": 0.72,
         "note": "Earth Engine Sentinel-2 NDWI or vegetation/water NDWI tile URL from an authenticated backend.",
     },
     "geeLst": {
         "label": "GEE Landsat LST",
-        "env": "AEIS_GEE_LST_TILE_URL",
+        "env": "KLA_GEE_LST_TILE_URL",
         "type": "thermal",
         "opacity": 0.68,
         "note": "Earth Engine Landsat land-surface-temperature tile URL from an authenticated backend.",
@@ -369,7 +363,7 @@ def dashboard_summary_payload() -> dict:
     }
     return {
         "summary": {
-            "title": "AEIS-K Intelligence Dashboard",
+            "title": "Kenya Live Atlas Intelligence Dashboard",
             "subtitle": "Climate, Water and Land Intelligence System for Kenya",
             **operational,
             "countiesTracked": count,
@@ -505,7 +499,7 @@ def system_access_payload() -> dict:
         "local_live_url": "http://127.0.0.1:8000",
         "frontend_dev_url": f"http://{lan_ip}:5173",
         "backend_url": f"http://{lan_ip}:8000",
-        "public_url": os.environ.get("AEIS_PUBLIC_URL", "").strip(),
+        "public_url": env("KLA_PUBLIC_URL", "").strip(),
         "public_access": {
             "enabled": public_access_mode(),
             "locked": public_access_locked(),
@@ -540,7 +534,7 @@ def gee_layers_payload() -> dict:
     layers = {}
     configured_count = 0
     for key, config in GEE_LAYER_CONFIG.items():
-        url_template = os.environ.get(config["env"], "").strip()
+        url_template = (env(config["env"], "") or "").strip()
         configured = bool(url_template)
         if configured:
             configured_count += 1
@@ -686,7 +680,7 @@ def fetch_weather_for_county(feature: dict) -> dict:
     try:
         request = Request(
             open_meteo_url(latitude, longitude),
-            headers={"User-Agent": "AEIS-K/0.1 county weather forecast"},
+            headers={"User-Agent": "KenyaLiveAtlas/0.1 county weather forecast"},
         )
         with urlopen(request, timeout=4) as response:
             provider_payload = json.loads(response.read().decode("utf-8"))
@@ -1024,12 +1018,12 @@ def system_actualization_payload() -> dict:
     ]
     next_actions = [
         "Use /api/indices/evaluate to validate real band values from a verified county raster.",
-        "Start with a verified Nyandarua raster extract, then compare AEIS-K outcome against field reports.",
+        "Start with a verified Nyandarua raster extract, then compare Kenya Live Atlas outcome against field reports.",
         "Keep demo remote access for presentation only; use GPS/login audit for operational county access.",
     ]
     return {
         "mode": "actualization_readiness",
-        "system": "AEIS-K Intelligence Dashboard",
+        "system": "Kenya Live Atlas Intelligence Dashboard",
         "readiness": readiness,
         "status": "field_test_ready" if readiness >= 65 else "setup_in_progress",
         "providers": providers,
@@ -1371,7 +1365,7 @@ def request_overpass(query: str) -> dict:
         data=body,
         headers={
             "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
-            "User-Agent": "AEIS-K/0.1 climate-water-land intelligence dashboard",
+            "User-Agent": "KenyaLiveAtlas/0.1 climate-water-land intelligence dashboard",
         },
         method="POST",
     )

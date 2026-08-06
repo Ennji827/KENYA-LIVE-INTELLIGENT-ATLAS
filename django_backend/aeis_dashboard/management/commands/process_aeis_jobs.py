@@ -23,7 +23,7 @@ def write_heartbeat(status: str) -> None:
 
 
 class Command(BaseCommand):
-    help = "Process durable AEIS-K intelligence and report jobs."
+    help = "Process durable Kenya Live Atlas intelligence and report jobs."
 
     def add_arguments(self, parser):
         parser.add_argument("--once", action="store_true", help="Process at most one job and exit.")
@@ -32,7 +32,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         once = bool(options["once"])
         sleep_seconds = max(0.2, float(options["sleep"]))
-        self.stdout.write("AEIS-K processing worker ready.")
+        self.stdout.write("Kenya Live Atlas processing worker ready.")
         write_heartbeat("running")
         try:
             while True:
@@ -48,4 +48,4 @@ class Command(BaseCommand):
                     time.sleep(sleep_seconds)
         except KeyboardInterrupt:
             write_heartbeat("stopped")
-            self.stdout.write("AEIS-K processing worker stopped.")
+            self.stdout.write("Kenya Live Atlas processing worker stopped.")

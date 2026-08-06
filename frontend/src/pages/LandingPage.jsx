@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import KsaPoweredBy from "../components/KsaPoweredBy";
 import SiteHeader from "../components/SiteHeader";
 import TopicCard from "../components/TopicCard";
+import { GoogleIcon } from "../components/AuthGateway";
 import { TOPICS } from "../data/topics";
 import { TOPIC_IMAGE } from "../data/topicImages";
 import "../styles/landing.css";
@@ -18,11 +19,11 @@ const SLIDES = TOPICS.filter((t) => TOPIC_IMAGE[t.id]).map((t) => ({
   topics: [t.id],
 }));
 
-const AUTO_MS = 6500;
+const AUTO_MS = 5000;
 const topicById = TOPICS.reduce((m, t) => ((m[t.id] = t), m), {});
 
 // Topics surfaced as quick links in the footer.
-const FOOTER_TOPICS = ["weather", "rainfall", "farmland", "forests", "roads", "households"];
+const FOOTER_TOPICS = ["weather", "landuse", "water_bodies", "roads", "households"];
 
 const ArrowRight = (props) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
@@ -33,6 +34,7 @@ const ArrowRight = (props) => (
 export default function LandingPage({
   onSignIn,
   onSignUp,
+  onGoogle,
   onExploreTopic,
   authenticated = false,
   user = null,
@@ -80,8 +82,7 @@ export default function LandingPage({
         <div className="lp-hero-inner">
           <div className="lp-badge">National Geospatial and Resource Intelligence</div>
           <h1 className="lp-hero-title">
-            Kenya's National<br />
-            <span className="lp-hero-accent">Intelligence Platform</span>
+            Kenya Live <span className="lp-hero-accent">Atlas</span>
           </h1>
         </div>
       </section>
@@ -175,7 +176,7 @@ export default function LandingPage({
             <p className="lp-cta-band-sub">
               {authenticated
                 ? "Jump into the intelligence hub and drill down from national to sub-county level."
-                : "Join researchers, analysts, and decision makers using AEIS-K."}
+                : "Join researchers, analysts, and decision makers using Kenya Live Atlas."}
             </p>
           </div>
           <div className="lp-cta-band-actions">
@@ -185,6 +186,12 @@ export default function LandingPage({
               <>
                 <button type="button" className="lp-cta-primary" onClick={onSignUp}>Create free account</button>
                 <button type="button" className="lp-cta-ghost lp-cta-ghost-light" onClick={onSignIn}>Sign in</button>
+                {onGoogle && (
+                  <button type="button" className="lp-cta-google" onClick={onGoogle}>
+                    <GoogleIcon />
+                    <span>Continue with Google</span>
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -196,12 +203,8 @@ export default function LandingPage({
         <div className="lp-section-inner lp-footer-grid">
           <div className="lp-footer-brand">
             <div className="lp-logo">
-              <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-                <rect width="32" height="32" fill="#0f4c81" />
-                <path d="M8 22 L16 10 L24 22" stroke="#4ade80" strokeWidth="2.5" strokeLinejoin="round" fill="none" />
-                <circle cx="16" cy="10" r="2" fill="#4ade80" />
-              </svg>
-              <span className="lp-logo-name">AEIS-K</span>
+              <span className="brand-abbr" aria-hidden="true">KLA</span>
+              <span className="lp-logo-name">KENYA LIVE ATLAS</span>
             </div>
             <p className="lp-footer-copy">
               National geospatial intelligence for Kenya — climate, environment,
@@ -241,7 +244,7 @@ export default function LandingPage({
 
         <div className="lp-footer-bottom">
           <div className="lp-section-inner lp-footer-bottom-inner">
-            <span>© {new Date().getFullYear()} AEIS-K · Resource and Ecosystem Intelligence System for Kenya</span>
+            <span>© {new Date().getFullYear()} Kenya Live Atlas · National Geospatial and Resource Intelligence for Kenya</span>
             <span>Kenya Space Agency</span>
           </div>
         </div>

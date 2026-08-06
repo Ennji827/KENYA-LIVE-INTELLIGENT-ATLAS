@@ -38,7 +38,7 @@
 }
 
 .lp-logo { display: inline-flex; align-items: center; gap: 10px; }
-.lp-logo-name { font-size: 18px; font-weight: 900; letter-spacing: -0.01em; color: var(--aeis-navy); }
+.lp-logo-name { font-size: 18px; font-weight: 900; letter-spacing: 0.04em; color: var(--aeis-navy); }
 
 .lp-nav-actions { display: flex; align-items: center; gap: 10px; }
 
@@ -105,6 +105,15 @@
 .lp-cta-ghost:hover { background: var(--glass-bg-strong); transform: translateY(-1px); }
 .lp-cta-ghost-light { color: #fff; border-color: rgba(255, 255, 255, 0.5); background: rgba(255, 255, 255, 0.14); }
 .lp-cta-ghost-light:hover { background: rgba(255, 255, 255, 0.24); }
+.lp-cta-google {
+  display: inline-flex; align-items: center; gap: 10px;
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  border-radius: 10px;
+  background: #fff; color: #1e293b; cursor: pointer;
+  font-size: 15px; font-weight: 700; padding: 11px 18px;
+  transition: box-shadow 0.13s, transform 0.13s;
+}
+.lp-cta-google:hover { box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18); transform: translateY(-1px); }
 
 /* ── Hero slideshow ─────────────────────────────────────────── */
 .lp-slideshow { position: relative; max-width: 1200px; margin: 36px auto 0; padding: 0 24px; }
@@ -121,7 +130,8 @@
   background-size: cover; background-position: center; background-repeat: no-repeat;
   display: flex; align-items: flex-end;
   opacity: 0; transform: scale(1.04);
-  transition: opacity 0.9s ease, transform 6.5s ease; pointer-events: none;
+  /* transform duration tracks AUTO_MS so the slow zoom completes within one dwell. */
+  transition: opacity 0.6s ease, transform 5s ease; pointer-events: none;
 }
 .lp-slide.is-active { opacity: 1; transform: scale(1); pointer-events: auto; }
 

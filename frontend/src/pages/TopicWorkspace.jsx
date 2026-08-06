@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
+  CartesianGrid,
+  Legend,
   XAxis,
   YAxis,
   Tooltip,
-  Cell,
 } from "recharts";
 import TopicMap from "../components/TopicMap";
 import InsightPanel from "../components/InsightPanel";
@@ -17,24 +18,26 @@ import {
   regionValue,
   aggregate,
   formatValue,
-  rampColor,
+  topicSeries,
+  buildScaffoldSeries,
   SOURCE_STATUS_LABEL,
 } from "../data/topics";
 import { buildReport, reportToCsv, downloadText, scopeLabel } from "../utils/intel";
 import { fetchOsmMetric, fetchGeeMetric } from "../utils/apiClient";
+import { fetchTopicLiveSeries, mergeMetricSeries } from "../utils/timeseries";
 
 // Topics backed by a live OpenStreetMap feed (per-county, national scope).
 const OSM_TOPICS = new Set(["roads"]);
 
-// Topics backed by Google Earth Engine zonal statistics + raster tiles. These
-// work at every drill level (national → county → sub-county → ward).
-const GEE_TOPICS = new Set([
-  "forests",
-  "water_bodies",
-  "farmland",
-  "rainfall",
-  "weather",
-]);
+// Composite topic id → the backend GEE topic that colours its map (the topic's
+// primary metric): weather → land-surface temperature, land use → cropland.
+const GEE_BACKEND = {
+  weather: "weather",
+  landuse: "farmland",
+  water_bodies: "water_bodies",
+};
+// Topics whose map is backed by Google Earth Engine zonal stats + raster tiles.
+const GEE_TOPICS = new Set(Object.keys(GEE_BACKEND));
 
 // The drill-down workspace for one topic: map + ranked regions + charts +
 // reports + AI insights, navigable National -> County -> Sub-county.
@@ -57,6 +60,10 @@ export default function TopicWorkspace({
   const [liveState, setLiveState] = useState("idle"); // idle | loading | live | error
   const [liveSource, setLiveSource] = useState(null); // "OpenStreetMap" | "Google Earth Engine"
   const [geeTile, setGeeTile] = useState(null); // { url, opacity, unit } raster overlay
+
+  // Verified per-metric temporal series, keyed by metric.key, when they exist.
+  const [chartLive, setChartLive] = useState({});
+  const [chartLiveState, setChartLiveState] = useState("idle"); // idle | loading | done
 
   // Fetch live values for the current scope. GEE topics resolve at every drill
   // level (national → county → sub-county → ward) and also return a raster tile;
@@ -95,7 +102,7 @@ export default function TopicWorkspace({
           : "subcounty";
       setLiveState("loading");
       setGeeTile(null);
-      fetchGeeMetric(topicId, {
+      fetchGeeMetric(GEE_BACKEND[topicId], {
         level,
         county: scope.county || undefined,
         subcounty: scope.subcounty || undefined,
@@ -183,18 +190,75 @@ export default function TopicWorkspace({
     return aggregate(topicId, regions.map((r) => r.value));
   }, [scope, regions, topicId]);
 
-  const chartData = useMemo(() => regions.slice(0, 12), [regions]);
-  const [minVal, maxVal] = useMemo(() => {
-    const vals = regions.map((r) => r.value).filter((v) => typeof v === "number");
-    return vals.length ? [Math.min(...vals), Math.max(...vals)] : [0, 1];
-  }, [regions]);
+  // ── Distribution over time (one line per metric) ────────────────
+  // Composite topics (weather, land use) plot several metrics; simple topics
+  // plot one. The primary metric is anchored to the headline above.
+  const scopeKey = scopeLabel(scope);
+  const seriesDefs = useMemo(() => topicSeries(topic), [topic]);
+  const timeGrain = seriesDefs[0]?.grain || "annual";
+  const regionNames = useMemo(
+    () => (scope.level === "ward" ? [scope.ward] : regions.map((r) => r.name)),
+    [scope, regions],
+  );
+  const scaffold = useMemo(
+    () => buildScaffoldSeries(topicId, { seedKey: scopeKey, regionNames, headline }),
+    [topicId, scopeKey, regionNames, headline],
+  );
 
-  const childTier =
-    scope.level === "national"
-      ? "counties"
-      : scope.level === "county"
-      ? "sub-counties"
-      : "wards";
+  // Swap a metric's scaffold for a verified series where reviewed data exists.
+  // Any failure (nothing imported, unauthorised, offline) leaves scaffolds alone.
+  useEffect(() => {
+    let cancelled = false;
+    setChartLiveState("loading");
+    setChartLive({});
+    fetchTopicLiveSeries(seriesDefs, scope)
+      .then((map) => {
+        if (cancelled) return;
+        setChartLive(map);
+        setChartLiveState("done");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setChartLive({});
+        setChartLiveState("done");
+      });
+    return () => {
+      cancelled = true;
+    };
+    // seriesDefs is stable per topic; scope fields drive the refetch.
+  }, [topicId, scope.level, scope.county, scope.subcounty, scope.ward]);
+
+  // Resolve each metric to its live points when present, else its scaffold.
+  const resolved = useMemo(
+    () =>
+      scaffold.map((s) => {
+        const live = chartLive[s.metric.key];
+        return {
+          key: s.metric.key,
+          metric: s.metric,
+          isLive: !!live,
+          source: live?.source,
+          points: live?.points || s.points,
+        };
+      }),
+    [scaffold, chartLive],
+  );
+  const timeRows = useMemo(() => mergeMetricSeries(resolved), [resolved]);
+  const anyLive = resolved.some((r) => r.isLive);
+  const chartLiveSource = resolved.find((r) => r.isLive)?.source;
+  const hasRightAxis = seriesDefs.some((m) => m.axis === "right");
+  const unitByKey = useMemo(
+    () => Object.fromEntries(seriesDefs.map((m) => [m.key, m.unit])),
+    [seriesDefs],
+  );
+  const decimalsByKey = useMemo(
+    () => Object.fromEntries(seriesDefs.map((m) => [m.key, m.decimals])),
+    [seriesDefs],
+  );
+  const liveByKey = useMemo(
+    () => Object.fromEntries(resolved.map((r) => [r.key, r.isLive])),
+    [resolved],
+  );
 
   return (
     <div className="workspace">
@@ -275,10 +339,8 @@ export default function TopicWorkspace({
         </div>
       </div>
 
-      {/* Live feed for topics backed by a connected source (weather/rainfall). */}
-      {(topicId === "weather" || topicId === "rainfall") && (
-        <LiveWeatherStrip county={scope.county} />
-      )}
+      {/* Live feed for the connected climate source. */}
+      {topicId === "weather" && <LiveWeatherStrip county={scope.county} />}
 
       <div className="workspace__grid">
         {/* Map */}
@@ -306,85 +368,75 @@ export default function TopicWorkspace({
           />
         </section>
 
-        {/* Ranked regions */}
-        <section className="panel panel--rank">
-          <div className="panel__head">
-            <h3>Ranked {childTier}</h3>
-            <span className="panel__hint">{regions.length} in view</span>
-          </div>
-          <div className="rank-list">
-            {regions.map((r, i) => {
-              const active =
-                scope.ward === r.name ||
-                scope.subcounty === r.name ||
-                scope.county === r.name;
-              return (
-                <button
-                  key={r.name}
-                  className={`rank-row${active ? " rank-row--active" : ""}`}
-                  onClick={() => handleDrill(r.name)}
-                >
-                  <span className="rank-idx">{i + 1}</span>
-                  <span
-                    className="rank-swatch"
-                    style={{
-                      background: rampColor(topicId, r.value, minVal, maxVal),
-                    }}
-                  />
-                  <span className="rank-name">{r.name}</span>
-                  <span className="rank-val">
-                    {formatValue(topicId, r.value)}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Chart */}
+        {/* Distribution over time for the current scope */}
         <section className="panel panel--chart">
           <div className="panel__head">
-            <h3>Top {childTier} by {topic.metricLabel.toLowerCase()}</h3>
+            <h3>
+              {seriesDefs.length > 1 ? topic.label : topic.metricLabel} over time ·{" "}
+              {scopeLabel(scope)}
+            </h3>
             <span className="panel__hint">
-              {scope.level === "national"
-                ? "Click a name to drill into that county"
-                : scope.level === "county"
-                ? "Click a name to drill into that sub-county"
-                : "Click a name to zoom to that ward"}
+              {chartLiveState === "loading"
+                ? "Checking for a verified series…"
+                : anyLive
+                ? `Live · ${chartLiveSource}`
+                : `${timeGrain === "monthly" ? "Monthly" : "Annual"} · ${SOURCE_STATUS_LABEL}`}
             </span>
           </div>
           <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart
-                data={chartData}
-                layout="vertical"
-                margin={{ left: 8, right: 16, top: 4, bottom: 4 }}
+            <ResponsiveContainer width="100%" height={320}>
+              <LineChart
+                data={timeRows}
+                margin={{ left: 4, right: hasRightAxis ? 4 : 16, top: 8, bottom: 4 }}
               >
-                <XAxis type="number" hide />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 11 }}
+                  interval={timeGrain === "monthly" ? 3 : 0}
+                />
                 <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={110}
-                  tick={<ClickableAxisTick onSelect={handleDrill} />}
+                  yAxisId="left"
+                  tick={{ fontSize: 11 }}
+                  width={44}
+                  tickFormatter={(v) => Number(v).toLocaleString()}
                 />
+                {hasRightAxis && (
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fontSize: 11 }}
+                    width={44}
+                    tickFormatter={(v) => Number(v).toLocaleString()}
+                  />
+                )}
                 <Tooltip
-                  formatter={(v) => formatValue(topicId, v)}
-                  cursor={{ fill: "rgba(148,163,184,0.15)" }}
+                  formatter={(value, name, item) => {
+                    const key = item?.dataKey;
+                    const d = decimalsByKey[key] ?? 0;
+                    const u = unitByKey[key] || "";
+                    return [
+                      `${Number(value).toLocaleString(undefined, { maximumFractionDigits: d })} ${u}`.trim(),
+                      name,
+                    ];
+                  }}
                 />
-                <Bar
-                  dataKey="value"
-                  radius={[0, 4, 4, 0]}
-                  cursor="pointer"
-                  onClick={(d) => d?.name && handleDrill(d.name)}
-                >
-                  {chartData.map((d) => (
-                    <Cell
-                      key={d.name}
-                      fill={rampColor(topicId, d.value, minVal, maxVal)}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
+                {seriesDefs.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} />}
+                {seriesDefs.map((m) => (
+                  <Line
+                    key={m.key}
+                    yAxisId={m.axis === "right" ? "right" : "left"}
+                    type="monotone"
+                    dataKey={m.key}
+                    name={m.label}
+                    stroke={m.color}
+                    strokeWidth={2.2}
+                    strokeDasharray={anyLive && !liveByKey[m.key] ? "5 4" : undefined}
+                    dot={false}
+                    connectNulls
+                  />
+                ))}
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </section>
@@ -417,26 +469,6 @@ export default function TopicWorkspace({
         />
       )}
     </div>
-  );
-}
-
-// A clickable Y-axis category label. Recharts injects x/y/payload; clicking the
-// region name drills into it (national → county, county → focus the sub-county),
-// which zooms the map to that region.
-function ClickableAxisTick({ x, y, payload, onSelect }) {
-  const name = payload?.value;
-  return (
-    <text
-      x={x}
-      y={y}
-      dy={4}
-      textAnchor="end"
-      className="chart-axis-tick"
-      onClick={() => name && onSelect?.(name)}
-    >
-      <title>{`Zoom to ${name}`}</title>
-      {name}
-    </text>
   );
 }
 

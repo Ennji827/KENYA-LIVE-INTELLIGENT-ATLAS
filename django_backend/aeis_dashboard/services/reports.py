@@ -263,8 +263,8 @@ def report_csv(report: IntelligenceReport) -> bytes:
 def report_xlsx(report: IntelligenceReport) -> bytes:
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = "AEIS-K Report"
-    sheet.append(["AEIS-K Intelligence Report", report.title])
+    sheet.title = "Kenya Live Atlas Report"
+    sheet.append(["Kenya Live Atlas Intelligence Report", report.title])
     sheet.append(["Scope", f"{report.scope_level}: {report.scope_name}"])
     sheet.append(["Status", report.status])
     sheet.append(["Confidence", report.confidence])
@@ -294,10 +294,10 @@ def report_pdf(report: IntelligenceReport) -> bytes:
         topMargin=16 * mm,
         bottomMargin=16 * mm,
         title=report.title,
-        author="AEIS-K",
+        author="Kenya Live Atlas",
     )
     story = [
-        Paragraph("AEIS-K Intelligence Report", styles["Title"]),
+        Paragraph("Kenya Live Atlas Intelligence Report", styles["Title"]),
         Paragraph(report.title, styles["Heading1"]),
         Paragraph(
             f"Scope: {report.scope_level.title()} - {report.scope_name} | "

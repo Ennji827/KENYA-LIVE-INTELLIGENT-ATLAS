@@ -1,4 +1,4 @@
-// Centralized AEIS-K backend API client.
+// Centralized Kenya Live Atlas backend API client.
 //
 // The topic-centric UI previously talked to only a handful of endpoints
 // (auth, payments, intelligence/query). This module wires up every backend
@@ -109,6 +109,15 @@ export const uploadDataAsset = (body) =>
   request("/api/data/assets/upload", { method: "POST", body }); // protected
 export const fetchNasaPowerHistory = (query) =>
   request("/api/data/history/nasa-power", { query });
+
+// Temporal intelligence used by the "Over time" chart (session-gated). The
+// monthly endpoint returns a per-month climate series; pass `source: "local"`
+// to keep it to reviewed imports only (no live NASA POWER fan-out). The metrics
+// endpoint returns reviewed EnvironmentalMetricObservation rows over a window.
+export const fetchMonthlyIntelligence = (query) =>
+  request("/api/data/intelligence/monthly", { query });
+export const fetchEnvironmentalMetrics = (query) =>
+  request("/api/data/intelligence/metrics", { query });
 export const fetchSentinel2 = (query) =>
   request("/api/data/imagery/sentinel-2", { query });
 export const fetchLandsatLatest = (query) =>

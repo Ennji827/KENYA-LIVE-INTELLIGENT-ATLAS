@@ -122,8 +122,29 @@
 .site-header__name {
   font-size: 18px;
   font-weight: 900;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.04em;
   color: #ffffff;
+}
+
+/* Abbreviation logo mark — "KLA" tile used in the header and landing footer. */
+.brand-abbr {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--aeis-brand-deep);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.10em;
+  line-height: 1;
+}
+.site-header__brand .brand-abbr {
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.34);
 }
 
 .site-header__actions {

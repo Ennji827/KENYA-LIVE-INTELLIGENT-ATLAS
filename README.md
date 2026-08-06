@@ -36,7 +36,7 @@ For permanent automatic startup after Windows logon:
 The control script installs missing requirements, runs migrations, builds the frontend, starts Django/Waitress and the processing worker, prevents duplicate servers, and can register an auto-restarting Windows scheduled task.
 
 - Dashboard and API: `http://127.0.0.1:8000`
-- Runtime database: `%LOCALAPPDATA%\AEIS-K\aeis-live.sqlite3` by default on Windows, or `AEIS_DB_PATH` when set
+- Runtime database: `%LOCALAPPDATA%\AEIS-K\aeis-live.sqlite3` by default on Windows, or `KLA_DB_PATH` when set
 - Runtime cache: `.runtime/cache`
 - Server concurrency: 12 Waitress request threads
 - Durable worker: database-backed AI and report processing outside request threads
@@ -81,25 +81,25 @@ Running `npm run dev` from the `frontend` directory is now duplicate-safe. If po
 Useful environment variables:
 
 ```powershell
-$env:AEIS_DJANGO_SECRET_KEY="replace-in-production"
-$env:AEIS_DJANGO_DEBUG="0"
-$env:AEIS_ALLOWED_HOSTS="dashboard.example.org"
-$env:AEIS_CORS_ALLOWED_ORIGIN="https://frontend.example.org"
-$env:AEIS_DB_PATH="C:\secure\aeis.sqlite3"
-$env:AEIS_DB_ENGINE="postgresql"
-$env:AEIS_DB_NAME="aeis_k"
-$env:AEIS_DB_USER="aeis_k"
-$env:AEIS_DB_PASSWORD="use-a-secret-manager"
-$env:AEIS_DB_HOST="127.0.0.1"
-$env:AEIS_DB_SSLMODE="require"
+$env:KLA_DJANGO_SECRET_KEY="replace-in-production"
+$env:KLA_DJANGO_DEBUG="0"
+$env:KLA_ALLOWED_HOSTS="dashboard.example.org"
+$env:KLA_CORS_ALLOWED_ORIGIN="https://frontend.example.org"
+$env:KLA_DB_PATH="C:\secure\aeis.sqlite3"
+$env:KLA_DB_ENGINE="postgresql"
+$env:KLA_DB_NAME="aeis_k"
+$env:KLA_DB_USER="aeis_k"
+$env:KLA_DB_PASSWORD="use-a-secret-manager"
+$env:KLA_DB_HOST="127.0.0.1"
+$env:KLA_DB_SSLMODE="require"
 $env:OPENAI_API_KEY="use-a-secret-manager"
-$env:AEIS_OPENAI_MODEL="gpt-5.4-mini"
-$env:AEIS_LOG_LEVEL="INFO"
-$env:AEIS_SECURE_SSL_REDIRECT="1"
-$env:AEIS_SECURE_HSTS_SECONDS="31536000"
-$env:AEIS_GEE_NDVI_TILE_URL="..."
-$env:AEIS_GEE_NDWI_TILE_URL="..."
-$env:AEIS_GEE_LST_TILE_URL="..."
+$env:KLA_OPENAI_MODEL="gpt-5.4-mini"
+$env:KLA_LOG_LEVEL="INFO"
+$env:KLA_SECURE_SSL_REDIRECT="1"
+$env:KLA_SECURE_HSTS_SECONDS="31536000"
+$env:KLA_GEE_NDVI_TILE_URL="..."
+$env:KLA_GEE_NDWI_TILE_URL="..."
+$env:KLA_GEE_LST_TILE_URL="..."
 ```
 
 For temporary outside-network testing:

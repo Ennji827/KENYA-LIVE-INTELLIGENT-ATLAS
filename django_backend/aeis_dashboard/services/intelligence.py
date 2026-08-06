@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 from django.core.cache import cache
 from django.db.models import Count
 
+from aeis_django.env import env
 from aeis_dashboard.models import (
     AEISUser,
     Alert,
@@ -89,7 +90,7 @@ INTELLIGENCE_SCHEMA = {
 # The same rules are echoed (in condensed form) inside the local fallback's
 # `explainability`, so the governance is consistent across both providers.
 GIS_ANALYST_RULES = """\
-You are the AEIS-K Geospatial Intelligence Analyst — a senior GIS expert briefing \
+You are the Kenya Live Atlas Geospatial Intelligence Analyst — a senior GIS expert briefing \
 Kenyan national and county decision-makers. Generate insights under these rules:
 
 1. EVIDENCE ONLY. Use only the supplied JSON: the `workspace` layer (the topic and \
@@ -280,7 +281,7 @@ def _data_context(scope: dict, workspace: dict | None = None) -> tuple[dict, lis
         if stats:
             sources.append(
                 {
-                    "name": f"AEIS-K {block['metric']} distribution layer",
+                    "name": f"Kenya Live Atlas {block['metric']} distribution layer",
                     "category": "workspace_layer",
                     "freshness": context["generated_at"],
                     "status": source_status,
@@ -348,7 +349,7 @@ def _data_context(scope: dict, workspace: dict | None = None) -> tuple[dict, lis
     if assets.exists():
         sources.append(
             {
-                "name": "AEIS-K GIS asset catalogue",
+                "name": "Kenya Live Atlas GIS asset catalogue",
                 "category": "uploaded_gis",
                 "freshness": assets.first().created_at.isoformat(),
                 "status": "available",
@@ -390,7 +391,7 @@ def _data_context(scope: dict, workspace: dict | None = None) -> tuple[dict, lis
     if field_reports.exists():
         sources.append(
             {
-                "name": "AEIS-K field reports",
+                "name": "Kenya Live Atlas field reports",
                 "category": "field_observations",
                 "freshness": field_reports.first().updated_at.isoformat(),
                 "status": "available",
@@ -555,7 +556,7 @@ def _local_analysis(question: str, scope: dict, context: dict, missing: list[str
 
     field_summary = context.get("field_reports") or {}
     observations.append(
-        f"AEIS-K contains {field_summary.get('count', 0)} field report(s), of which {field_summary.get('verified', 0)} are verified."
+        f"Kenya Live Atlas contains {field_summary.get('count', 0)} field report(s), of which {field_summary.get('verified', 0)} are verified."
     )
     if field_summary.get("count", 0) == 0:
         actions.append("Assign field verification where satellite or forecast evidence is insufficient.")
@@ -584,7 +585,7 @@ def _local_analysis(question: str, scope: dict, context: dict, missing: list[str
         evidence.insert(
             0,
             {
-                "source": f"AEIS-K {workspace_block.get('metric')} distribution layer",
+                "source": f"Kenya Live Atlas {workspace_block.get('metric')} distribution layer",
                 "observation": (
                     f"Mean {st['mean']} across {st['count']} regions; "
                     f"range {st['min']['value']}–{st['max']['value']}."
@@ -604,7 +605,7 @@ def _local_analysis(question: str, scope: dict, context: dict, missing: list[str
         confidence = "high"
 
     summary = (
-        f"AEIS-K reviewed the available evidence for {scope['name']}. "
+        f"Kenya Live Atlas reviewed the available evidence for {scope['name']}. "
         f"{observations[0]} "
         "The result is intentionally limited to connected, source-dated data."
     )
@@ -648,7 +649,7 @@ def _openai_analysis(question: str, scope: dict, context: dict, missing: list[st
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise IntelligenceError("OpenAI provider is not configured.", 503)
-    model = os.environ.get("AEIS_OPENAI_MODEL", "gpt-5.4-mini").strip()
+    model = env("KLA_OPENAI_MODEL", "gpt-5.4-mini").strip()
     request_payload = {
         "model": model,
         "store": False,
@@ -684,7 +685,7 @@ def _openai_analysis(question: str, scope: dict, context: dict, missing: list[st
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "AEIS-K/1.0 intelligence",
+            "User-Agent": "KenyaLiveAtlas/1.0 intelligence",
         },
     )
     try:
@@ -704,7 +705,7 @@ def provider_status() -> dict:
     return {
         "active": "openai_responses" if configured else "local_rule_based",
         "openai_configured": configured,
-        "openai_model": os.environ.get("AEIS_OPENAI_MODEL", "gpt-5.4-mini"),
+        "openai_model": env("KLA_OPENAI_MODEL", "gpt-5.4-mini"),
         "fallback": "local_rule_based",
         "safety_rule": "Answers use connected evidence only and must list missing data.",
     }

@@ -7,6 +7,7 @@ from datetime import timedelta
 from django.db.models import Q
 from django.utils import timezone
 
+from aeis_django.env import env
 from aeis_dashboard.models import AEISUser, AccessSession, AuthAudit, SystemSetting
 
 from . import domain
@@ -181,7 +182,7 @@ def session_payload(session: AccessSession) -> dict:
             "username": user.username,
             "email": user.email,
             "provider": session.provider,
-            "command_center": "AEIS-K Public Portal",
+            "command_center": "Kenya Live Atlas Public Portal",
             "gps_status": "not_required",
             "boundary_scope": "public_read",
             "permissions": ROLE_PERMISSIONS.get(user.role, []),
@@ -210,7 +211,7 @@ def session_payload(session: AccessSession) -> dict:
     demo = session.provider == "password_demo"
     if user.role == AEISUser.Role.AUDITOR:
         boundary_scope = "national_read_only"
-        command_center = "AEIS-K National Audit Workspace"
+        command_center = "Kenya Live Atlas National Audit Workspace"
         gps_status = "not_required"
     elif user.role == AEISUser.Role.FARMER:
         boundary_scope = "own_field_site_only"
@@ -393,7 +394,7 @@ def national_login_accounts() -> list[dict]:
                 "role": user.role,
                 "provider": user.provider,
                 "is_active": user.is_active,
-                "command_center": profile.get("command_center", "AEIS-K National Access"),
+                "command_center": profile.get("command_center", "Kenya Live Atlas National Access"),
                 "boundary_scope": profile.get("boundary_scope", "national"),
                 "permissions": profile.get("permissions", []),
                 "created_at": user.date_joined.isoformat(),
@@ -484,19 +485,39 @@ def authenticate_public_login(payload: dict) -> tuple[int, dict]:
 
 def authenticate_google_login(payload: dict) -> tuple[int, dict]:
     import json as _json
+    import os
     import urllib.error
     import urllib.request
 
     id_token = str(payload.get("id_token") or "").strip()
+    access_token = str(payload.get("access_token") or "").strip()
     position = str(payload.get("position") or "").strip()
 
-    if not id_token:
-        return 400, {"error": "Google id_token is required"}
+    if not id_token and not access_token:
+        return 400, {"error": "Google access_token or id_token is required"}
 
     try:
-        url = f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}"
-        with urllib.request.urlopen(url, timeout=8) as resp:
-            google_data = _json.loads(resp.read())
+        if access_token:
+            # OAuth token flow: resolve the verified profile from the access token.
+            profile_req = urllib.request.Request(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            with urllib.request.urlopen(profile_req, timeout=8) as resp:
+                google_data = _json.loads(resp.read())
+            # Guard against token substitution: when the backend knows the app's
+            # client id, require the token to have been issued for it.
+            expected_aud = env("KLA_GOOGLE_CLIENT_ID", "").strip()
+            if expected_aud:
+                info_url = f"https://oauth2.googleapis.com/tokeninfo?access_token={access_token}"
+                with urllib.request.urlopen(info_url, timeout=8) as resp:
+                    token_meta = _json.loads(resp.read())
+                if expected_aud not in {token_meta.get("aud"), token_meta.get("azp")}:
+                    return 401, {"error": "Google token was issued for a different application"}
+        else:
+            url = f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}"
+            with urllib.request.urlopen(url, timeout=8) as resp:
+                google_data = _json.loads(resp.read())
     except urllib.error.HTTPError as exc:
         try:
             body = _json.loads(exc.read())

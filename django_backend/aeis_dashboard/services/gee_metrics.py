@@ -22,20 +22,21 @@ and the frontend cleanly falls back to scaffolding. Nothing here imports ``ee``
 at module load, so the app runs unchanged until a key is supplied.
 
 Activation (see .env.local):
-    AEIS_GEE_PROJECT           Google Cloud project id with the Earth Engine API enabled
-    AEIS_GEE_SERVICE_ACCOUNT   service-account email registered for Earth Engine
-    AEIS_GEE_SA_KEY_FILE       path to that account's JSON key file
-                               (or AEIS_GEE_SA_KEY holding the JSON itself)
+    KLA_GEE_PROJECT           Google Cloud project id with the Earth Engine API enabled
+    KLA_GEE_SERVICE_ACCOUNT   service-account email registered for Earth Engine
+    KLA_GEE_SA_KEY_FILE       path to that account's JSON key file
+                               (or KLA_GEE_SA_KEY holding the JSON itself)
 """
 
 from __future__ import annotations
 
 import json
-import os
 import threading
 from datetime import date, timedelta
 
 from django.core.cache import cache
+
+from aeis_django.env import env
 
 from . import domain
 
@@ -153,8 +154,8 @@ _TTL_SECONDS = 24 * 60 * 60  # values change slowly; be kind to EE quotas
 
 def _credentials_present() -> bool:
     return bool(
-        os.environ.get("AEIS_GEE_SERVICE_ACCOUNT")
-        and (os.environ.get("AEIS_GEE_SA_KEY_FILE") or os.environ.get("AEIS_GEE_SA_KEY"))
+        env("KLA_GEE_SERVICE_ACCOUNT")
+        and (env("KLA_GEE_SA_KEY_FILE") or env("KLA_GEE_SA_KEY"))
     )
 
 
@@ -182,17 +183,17 @@ def _ensure_initialised() -> tuple[bool, str | None]:
         try:
             import ee
 
-            email = os.environ["AEIS_GEE_SERVICE_ACCOUNT"]
-            key_file = os.environ.get("AEIS_GEE_SA_KEY_FILE")
+            email = env("KLA_GEE_SERVICE_ACCOUNT")
+            key_file = env("KLA_GEE_SA_KEY_FILE")
             if key_file:
                 credentials = ee.ServiceAccountCredentials(email, key_file)
             else:
                 # Key provided inline as JSON — hand the string straight to EE.
                 credentials = ee.ServiceAccountCredentials(
-                    email, key_data=os.environ["AEIS_GEE_SA_KEY"]
+                    email, key_data=env("KLA_GEE_SA_KEY")
                 )
             init_kwargs = {}
-            project = os.environ.get("AEIS_GEE_PROJECT")
+            project = env("KLA_GEE_PROJECT")
             if project:
                 init_kwargs["project"] = project
             ee.Initialize(credentials, **init_kwargs)
@@ -371,9 +372,9 @@ def status_payload() -> dict:
         ),
         "supported_topics": list(SUPPORTED_TOPICS),
         "environment_variables": [
-            "AEIS_GEE_PROJECT",
-            "AEIS_GEE_SERVICE_ACCOUNT",
-            "AEIS_GEE_SA_KEY_FILE",
+            "KLA_GEE_PROJECT",
+            "KLA_GEE_SERVICE_ACCOUNT",
+            "KLA_GEE_SA_KEY_FILE",
         ],
         "generated_at": domain.now_iso(),
     }

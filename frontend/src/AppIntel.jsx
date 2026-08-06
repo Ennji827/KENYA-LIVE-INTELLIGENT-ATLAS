@@ -19,6 +19,9 @@ export default function AppIntel() {
   const [session, setSession] = useState(() => readAuthSession());
   // Which signed-out screen to show: "landing" | "signin" | "register".
   const [authScreen, setAuthScreen] = useState("landing");
+  // Set when the visitor picks "Continue with Google" on the landing page, so
+  // the auth screen opens the Google popup immediately on mount.
+  const [autoGoogle, setAutoGoogle] = useState(false);
   // Topic the visitor picked on the landing page before signing in; opened once
   // authenticated so an "Explore" click deep-links straight into that topic.
   const [pendingTopic, setPendingTopic] = useState(null);
@@ -89,8 +92,9 @@ export default function AppIntel() {
       return (
         <div className="intel-app">
           <LandingPage
-            onSignIn={() => setAuthScreen("signin")}
-            onSignUp={() => setAuthScreen("register")}
+            onSignIn={() => { setAutoGoogle(false); setAuthScreen("signin"); }}
+            onSignUp={() => { setAutoGoogle(false); setAuthScreen("register"); }}
+            onGoogle={() => { setAutoGoogle(true); setAuthScreen("signin"); }}
             onExploreTopic={exploreTopic}
           />
         </div>
@@ -100,8 +104,9 @@ export default function AppIntel() {
       <div className="intel-app">
         <AuthGateway
           initialView={authScreen}
+          autoGoogle={autoGoogle}
           onAuthenticated={handleAuthenticated}
-          onBack={() => { setAuthScreen("landing"); setPendingTopic(null); }}
+          onBack={() => { setAuthScreen("landing"); setPendingTopic(null); setAutoGoogle(false); }}
         />
       </div>
     );

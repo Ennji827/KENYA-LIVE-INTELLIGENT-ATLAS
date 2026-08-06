@@ -58,23 +58,23 @@ function Get-LanIp {
 function Set-AeisEnvironment {
   New-Item -ItemType Directory -Force $Runtime | Out-Null
   $env:PYTHONDONTWRITEBYTECODE = "1"
-  $env:AEIS_CACHE_BACKEND = "locmem"
-  if (-not $env:AEIS_DB_PATH) {
-    $env:AEIS_DB_PATH = Get-AeisDefaultDbPath
+  $env:KLA_CACHE_BACKEND = "locmem"
+  if (-not $env:KLA_DB_PATH) {
+    $env:KLA_DB_PATH = Get-AeisDefaultDbPath
   }
   $secretPath = Join-Path $Runtime "django-secret-key"
-  if (-not $env:AEIS_DJANGO_SECRET_KEY) {
+  if (-not $env:KLA_DJANGO_SECRET_KEY) {
     if (-not (Test-Path -LiteralPath $secretPath)) {
       $python = Get-AeisPython
       & $python -c "import secrets, pathlib; pathlib.Path(r'$secretPath').write_text(secrets.token_urlsafe(64), encoding='utf-8')"
     }
-    $env:AEIS_DJANGO_SECRET_KEY = (Get-Content -LiteralPath $secretPath -Raw).Trim()
+    $env:KLA_DJANGO_SECRET_KEY = (Get-Content -LiteralPath $secretPath -Raw).Trim()
   }
-  if (-not $env:AEIS_DJANGO_DEBUG) {
-    $env:AEIS_DJANGO_DEBUG = "0"
+  if (-not $env:KLA_DJANGO_DEBUG) {
+    $env:KLA_DJANGO_DEBUG = "0"
   }
-  if (-not $env:AEIS_ALLOWED_HOSTS) {
-    $env:AEIS_ALLOWED_HOSTS = "localhost,127.0.0.1,[::1],$(Get-LanIp)"
+  if (-not $env:KLA_ALLOWED_HOSTS) {
+    $env:KLA_ALLOWED_HOSTS = "localhost,127.0.0.1,[::1],$(Get-LanIp)"
   }
 }
 
@@ -297,7 +297,7 @@ function Show-AeisStatus {
   Write-Host "Development frontend: $(if ($frontendOwner -and (Test-AeisProcess $frontendOwner)) { "RUNNING  $FrontendUrl" } else { "STOPPED" })"
   Write-Host "Background worker:    $(if ($workerCount -gt 0 -or (Test-WorkerHeartbeat)) { "RUNNING" } else { "STOPPED" })"
   Write-Host "Automatic startup:    $(if ($task) { "$($task.State) ($TaskName)" } else { "NOT INSTALLED" })"
-  Write-Host "Runtime database:     $(if ($env:AEIS_DB_PATH) { $env:AEIS_DB_PATH } else { Get-AeisDefaultDbPath })"
+  Write-Host "Runtime database:     $(if ($env:KLA_DB_PATH) { $env:KLA_DB_PATH } else { Get-AeisDefaultDbPath })"
   if ($backendOwner) {
     Write-Host "Port 8000 PID:         $($backendOwner.ProcessId)"
   }

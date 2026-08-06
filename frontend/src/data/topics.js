@@ -1,4 +1,4 @@
-// AEIS-K Intelligence topics.
+// Kenya Live Atlas Intelligence topics.
 //
 // This is the data backbone of the intelligence system. It defines the eight
 // intelligence topics and produces a *scaffolded* distribution for every region
@@ -38,30 +38,12 @@ function scaled(seed, min, max, skew = 1) {
 
 export const TOPICS = [
   {
-    id: "rainfall",
-    label: "Rainfall",
-    icon: "🌧️",
-    category: "Climate",
-    unit: "mm/yr",
-    metricLabel: "Annual rainfall",
-    aggregation: "avg", // national/county figure is an average of children
-    decimals: 0,
-    range: [250, 2200],
-    skew: 1,
-    ramp: ["#eff6ff", "#1d4ed8"],
-    higherIsBetter: null, // more rain is not simply "good" or "bad"
-    description:
-      "Seasonal and annual precipitation distribution across the country, from arid north to the highlands and coast.",
-    liveHint:
-      "Can be backed today by the existing Open-Meteo forecast and NASA POWER history feeds.",
-  },
-  {
     id: "weather",
     label: "Weather",
     icon: "⛅",
     category: "Climate",
     unit: "°C",
-    metricLabel: "Mean temperature",
+    metricLabel: "Temperature, rainfall & humidity",
     aggregation: "avg",
     decimals: 1,
     range: [12, 30],
@@ -69,17 +51,26 @@ export const TOPICS = [
     ramp: ["#e0f2fe", "#ea580c"],
     higherIsBetter: null,
     description:
-      "Near-real-time weather conditions — temperature, humidity, and short-range forecast signals across the country.",
+      "The core climate signals over time — temperature, rainfall, and humidity together — from the arid north to the highlands and coast.",
     liveHint:
-      "Back with the live Open-Meteo forecast feed (already connected for county pages).",
+      "Backed by reviewed monthly climate records with NASA POWER fallback (temperature, rainfall, humidity).",
+    // Three metrics share the monthly time axis. Temperature and humidity read on
+    // the left axis; rainfall (mm) on the right. `key` seeds the deterministic
+    // scaffold — the primary metric reuses the topic id so the map (temperature)
+    // and the chart agree.
+    series: [
+      { key: "weather",  label: "Temperature", unit: "°C", decimals: 1, range: [12, 30],   skew: 1, aggregation: "avg", grain: "monthly", seasonal: "osc",  swing: 2.6, color: "#ea580c", axis: "left",  live: { kind: "monthly", field: "temperature_c" } },
+      { key: "rainfall", label: "Rainfall",    unit: "mm", decimals: 0, range: [250, 2200], skew: 1, aggregation: "avg", grain: "monthly", seasonal: "rain",             color: "#2563eb", axis: "right", live: { kind: "monthly", field: "rainfall_mm" } },
+      { key: "humidity", label: "Humidity",    unit: "%",  decimals: 0, range: [38, 82],    skew: 1, aggregation: "avg", grain: "monthly", seasonal: "osc",  swing: 7,   color: "#0891b2", axis: "left",  live: { kind: "monthly", field: "humidity_pct" } },
+    ],
   },
   {
-    id: "farmland",
-    label: "Farm Land",
+    id: "landuse",
+    label: "Land Use",
     icon: "🌾",
     category: "Land use",
     unit: "% of land",
-    metricLabel: "Cultivated land share",
+    metricLabel: "Cropland & forest cover",
     aggregation: "avg",
     decimals: 1,
     range: [2, 68],
@@ -87,26 +78,15 @@ export const TOPICS = [
     ramp: ["#fefce8", "#ca8a04"],
     higherIsBetter: null,
     description:
-      "Share of land under active cultivation, indicating agricultural footprint and food-production capacity.",
-    liveHint: "Connect a national land-cover / cropland classification source.",
-  },
-  {
-    id: "forests",
-    label: "Forests",
-    icon: "🌳",
-    category: "Environment",
-    unit: "% cover",
-    metricLabel: "Forest cover",
-    aggregation: "avg",
-    decimals: 1,
-    range: [1, 55],
-    skew: 1.4,
-    ramp: ["#f0fdf4", "#15803d"],
-    higherIsBetter: true,
-    description:
-      "Natural and planted forest cover combined — indigenous canopy plus plantation and reforestation, a measure of biodiversity, carbon stock, and restoration.",
+      "How the country's land is used over time — cultivated cropland alongside forest cover, the agricultural footprint next to canopy and restoration.",
     liveHint:
-      "Connect canopy / land-cover remote sensing and the forestry plantation registry.",
+      "Connect a national land-cover / cropland classification source plus canopy remote sensing.",
+    // Two land-cover shares on one % axis. The map colours by cropland (the
+    // primary metric reuses the topic id); forest cover is the second line.
+    series: [
+      { key: "landuse", label: "Cropland",     unit: "% of land", decimals: 1, range: [2, 68], skew: 1.1, aggregation: "avg", grain: "annual", seasonal: null, color: "#ca8a04", axis: "left", live: { kind: "metric", metric: "cropland_pct" } },
+      { key: "forest",  label: "Forest cover", unit: "% cover",   decimals: 1, range: [1, 55], skew: 1.4, aggregation: "avg", grain: "annual", seasonal: null, color: "#15803d", axis: "left", live: { kind: "metric", metric: "forest_cover_pct" } },
+    ],
   },
   {
     id: "water_bodies",
@@ -223,6 +203,167 @@ export function nationalValue(topicId) {
     topicId,
     kenyaCountyNames.map((name) => regionValue(topicId, name)),
   );
+}
+
+// ── Scaffolded time series ────────────────────────────────────────
+// A deterministic "distribution over time" for the current scope. Composite
+// topics (weather, land use) carry several `series` metrics; simple topics get a
+// single implicit metric. Values are stable pseudo-random and marked scaffolded
+// until utils/timeseries.js overlays a real source per metric.
+//
+// Weather renders monthly (temperature & humidity oscillate; rainfall follows
+// Kenya's bimodal seasons and its twelve months sum back to the annual figure).
+// Everything else is an annual trend whose most-recent point matches the current
+// headline, drifting deterministically into the past.
+
+// The ordered metrics a topic plots. Simple topics derive one metric from their
+// own fields; the primary metric reuses the topic id as its seed so the map and
+// the chart agree.
+export function topicSeries(topic) {
+  if (!topic) return [];
+  if (topic.series) return topic.series;
+  return [
+    {
+      key: topic.id,
+      label: topic.metricLabel,
+      unit: topic.unit,
+      decimals: topic.decimals,
+      range: topic.range,
+      skew: topic.skew,
+      aggregation: topic.aggregation,
+      grain: topic.category === "Climate" ? "monthly" : "annual",
+      seasonal: null,
+      color: topic.ramp[1],
+      axis: "left",
+      live: null,
+    },
+  ];
+}
+
+// Relative monthly weighting for Kenya's bimodal rainfall (long rains ~Apr,
+// short rains ~Nov), indexed by calendar month 1–12.
+function rainSeasonWeight(month) {
+  const longRains = Math.exp(-(((month - 4) / 1.7) ** 2));
+  const shortRains = 0.7 * Math.exp(-(((month - 11) / 1.5) ** 2));
+  return 0.12 + longRains + shortRains;
+}
+
+// The ordered list of periods ending at the current one.
+function periodList(grain, points) {
+  const now = new Date();
+  const out = [];
+  if (grain === "monthly") {
+    for (let i = points - 1; i >= 0; i -= 1) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      out.push({
+        period: `${d.getFullYear()}-${mm}`,
+        label: d.toLocaleString(undefined, { month: "short", year: "2-digit" }),
+        month: d.getMonth() + 1,
+      });
+    }
+  } else {
+    const y = now.getFullYear();
+    for (let i = points - 1; i >= 0; i -= 1) {
+      out.push({ period: String(y - i), label: String(y - i), month: 0 });
+    }
+  }
+  return out;
+}
+
+// Deterministic scaffold value for one leaf region under a metric.
+function metricRegionValue(metric, regionName) {
+  if (!regionName) return null;
+  const [min, max] = metric.range;
+  const value = scaled(`${metric.key}::${regionName}`, min, max, metric.skew || 1);
+  return Number(value.toFixed(metric.decimals));
+}
+
+// Aggregate leaf values into a scope figure, honouring the metric's mode.
+function aggregateMetric(metric, values) {
+  const clean = values.filter((v) => typeof v === "number" && !Number.isNaN(v));
+  if (!clean.length) return null;
+  if (metric.aggregation === "sum") {
+    return Number(clean.reduce((s, v) => s + v, 0).toFixed(metric.decimals));
+  }
+  const mean = clean.reduce((s, v) => s + v, 0) / clean.length;
+  return Number(mean.toFixed(metric.decimals));
+}
+
+// Keep a scaffolded value non-negative, and inside 0–100 for percentage metrics.
+function boundMetric(metric, value) {
+  let v = Math.max(0, value);
+  if (metric.unit.includes("%")) v = Math.min(100, v);
+  return Number(v.toFixed(metric.decimals));
+}
+
+// The deterministic point series for one metric at a scope, anchored to
+// `anchorValue` (the scope aggregate; for monthly rainfall, the annual figure).
+function metricSeries(metric, seedKey, anchorValue, periods) {
+  if (anchorValue == null || Number.isNaN(anchorValue)) {
+    return periods.map((p) => ({ period: p.period, label: p.label, value: null }));
+  }
+  const seed = `${metric.key}::${seedKey}`;
+
+  if (metric.grain === "monthly" && metric.seasonal === "rain") {
+    // Distribute the annual anchor across each year's twelve months by the
+    // seasonal weighting, so a full year of monthly points sums back to it.
+    const weights = {};
+    let total = 0;
+    for (let m = 1; m <= 12; m += 1) {
+      weights[m] = rainSeasonWeight(m);
+      total += weights[m];
+    }
+    return periods.map((p) => {
+      const noise = 1 + (unit(`${seed}::${p.period}`) - 0.5) * 0.18;
+      const value = ((anchorValue * weights[p.month]) / total) * noise;
+      return { period: p.period, label: p.label, value: boundMetric(metric, value) };
+    });
+  }
+
+  if (metric.grain === "monthly" && metric.seasonal === "osc") {
+    // A monthly mean oscillating gently around the anchor.
+    const phase = unit(`${seed}::phase`) * Math.PI * 2;
+    const swing = metric.swing ?? Math.max(0.6, (metric.range[1] - metric.range[0]) * 0.06);
+    return periods.map((p) => {
+      const seasonal = Math.sin(((p.month - 1) / 12) * Math.PI * 2 + phase);
+      const noise = (unit(`${seed}::${p.period}`) - 0.5) * swing * 0.4;
+      return { period: p.period, label: p.label, value: boundMetric(metric, anchorValue + seasonal * swing + noise) };
+    });
+  }
+
+  // Annual trend anchored so the most-recent point equals the anchor.
+  const trend = (unit(`${seed}::trend`) - 0.45) * 0.05; // ≈ −2.25%..+2.75% / yr
+  const n = periods.length;
+  return periods.map((p, i) => {
+    const stepsBack = n - 1 - i;
+    if (stepsBack === 0) {
+      return { period: p.period, label: p.label, value: Number(anchorValue.toFixed(metric.decimals)) };
+    }
+    const noise = 1 + (unit(`${seed}::${p.period}`) - 0.5) * 0.05;
+    return { period: p.period, label: p.label, value: boundMetric(metric, (anchorValue / (1 + trend) ** stepsBack) * noise) };
+  });
+}
+
+// Build every metric's scaffolded series for a topic at a scope. `regionNames`
+// are the child regions in view (or the single focused leaf); `headline` anchors
+// the primary metric so its latest point matches the summary figure.
+export function buildScaffoldSeries(topicId, { seedKey, regionNames = [], headline } = {}) {
+  const topic = topicById[topicId];
+  if (!topic) return [];
+  const metrics = topicSeries(topic);
+  const grain = metrics[0].grain;
+  const periods = periodList(grain, grain === "monthly" ? 24 : 10);
+
+  return metrics.map((metric) => {
+    const isPrimary = metric.key === topic.id;
+    const computed = aggregateMetric(
+      metric,
+      regionNames.map((n) => metricRegionValue(metric, n)),
+    );
+    const anchor = isPrimary && headline != null ? headline : computed;
+    return { metric, points: metricSeries(metric, seedKey, anchor, periods), anchor };
+  });
 }
 
 // Format a value with the topic's unit for display.

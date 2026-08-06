@@ -1,1 +1,1 @@
-"""Domain services for the AEIS-K Django application."""
+"""Domain services for the Kenya Live Atlas Django application."""

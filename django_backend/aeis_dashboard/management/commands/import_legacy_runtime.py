@@ -12,7 +12,7 @@ from aeis_dashboard.models import AEISUser, AuthAudit, SystemSetting
 
 
 class Command(BaseCommand):
-    help = "Import users, audit records, and settings from the retired AEIS-K SQLite runtime."
+    help = "Import users, audit records, and settings from the retired Kenya Live Atlas SQLite runtime."
 
     def add_arguments(self, parser):
         parser.add_argument("--path", type=Path, default=settings.PROJECT_ROOT / "backend" / "aeis.sqlite")
