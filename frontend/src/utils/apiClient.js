@@ -139,6 +139,25 @@ export const fetchGeeMetric = (topic, { level, county, subcounty } = {}) =>
     query: { level, county, subcounty },
   });
 
+// ── Facility counts from the bundled GeoPackage registries ────────
+// Per-region counts of surveyed facilities (hospitals / schools /
+// police_posts / admin_offices), assigned to regions server-side by
+// point-in-polygon. Same scope parameters as the Earth Engine metric.
+export const fetchFacilityMetric = (topic, { level, county, subcounty } = {}) =>
+  request(`/api/facilities/metric/${enc(topic)}`, {
+    query: { level, county, subcounty },
+  });
+
+// Individual facility locations for the map's dot layer, scoped like the
+// metric above. Thinned server-side past `limit`; the response reports what
+// fraction was returned.
+export const fetchFacilityPoints = (topic, { level, county, subcounty, limit } = {}) =>
+  request(`/api/facilities/points/${enc(topic)}`, {
+    query: { level, county, subcounty, limit },
+  });
+
+export const fetchFacilityStatus = () => request("/api/facilities/status");
+
 export const fetchGeeStatus = () => request("/api/gee/status");
 
 // ── Intelligence ─────────────────────────────────────────────────

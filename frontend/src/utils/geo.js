@@ -22,6 +22,44 @@ export async function loadGeo(url) {
   return promise;
 }
 
+// A scope level → the boundary level actually drawn. A focused ward still
+// renders its sub-county's wards, so both collapse to "subcounty".
+export function mapLevelFor(level) {
+  return level === "national"
+    ? "national"
+    : level === "county"
+    ? "county"
+    : "subcounty";
+}
+
+// The GeoJSON property holding a feature's name at a given boundary level.
+export function nameKeyFor(mapLevel) {
+  return mapLevel === "national"
+    ? "ADM1_EN"
+    : mapLevel === "county"
+    ? "ADM2_EN"
+    : "ADM3_EN";
+}
+
+// Boundary features for one area, filtered to their parent. Shared by the map
+// and the insights page so both agree on what "the regions in view" means.
+export async function loadRegionFeatures({ level, county, subcounty }) {
+  const url =
+    level === "national"
+      ? COUNTIES_URL
+      : level === "county"
+      ? SUBCOUNTIES_URL
+      : WARDS_URL;
+  const data = await loadGeo(url);
+  if (level === "county") {
+    return data.features.filter((f) => f.properties?.ADM1_EN === county);
+  }
+  if (level === "subcounty") {
+    return data.features.filter((f) => f.properties?.ADM2_EN === subcounty);
+  }
+  return data.features;
+}
+
 export function countiesUrl() {
   return COUNTIES_URL;
 }

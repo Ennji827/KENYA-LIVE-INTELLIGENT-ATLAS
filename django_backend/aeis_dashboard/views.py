@@ -16,7 +16,18 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .models import AEISUser, Alert, DataAsset, FieldReport, ProcessingJob
-from .services import auth, data_sources, domain, gee_metrics, intelligence, jobs, osm_metrics, payments, reports
+from .services import (
+    auth,
+    data_sources,
+    domain,
+    facility_metrics,
+    gee_metrics,
+    intelligence,
+    jobs,
+    osm_metrics,
+    payments,
+    reports,
+)
 
 
 FRONTEND_DIST_DIR = settings.PROJECT_ROOT / "frontend" / "dist"
@@ -1221,6 +1232,43 @@ def gee_metric(request: HttpRequest, topic: str) -> JsonResponse:
 @require_http_methods(["GET", "OPTIONS"])
 def gee_status(request: HttpRequest) -> JsonResponse:
     return api_json(gee_metrics.status_payload())
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def facility_metric(request: HttpRequest, topic: str) -> JsonResponse:
+    # Per-region facility counts from the bundled GeoPackage point layers
+    # (hospitals / schools / police_posts / admin_offices), assigned to regions
+    # by point-in-polygon. Same scope parameters as gee_metric.
+    status, result = facility_metrics.metric_payload(
+        topic,
+        level=request.GET.get("level") or "national",
+        county=request.GET.get("county") or None,
+        subcounty=request.GET.get("subcounty") or None,
+    )
+    return api_json(result, status=status)
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def facility_points(request: HttpRequest, topic: str) -> JsonResponse:
+    # Individual facility locations for the map's dot layer, scoped like
+    # facility_metric. Thinned by an even stride past ?limit= (default 12,000).
+    try:
+        limit = int(request.GET.get("limit") or facility_metrics.MAX_POINTS)
+    except ValueError:
+        limit = facility_metrics.MAX_POINTS
+    status, result = facility_metrics.points_payload(
+        topic,
+        level=request.GET.get("level") or "national",
+        county=request.GET.get("county") or None,
+        subcounty=request.GET.get("subcounty") or None,
+        limit=limit,
+    )
+    return api_json(result, status=status)
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def facility_status(request: HttpRequest) -> JsonResponse:
+    return api_json(facility_metrics.status_payload())
 
 
 @require_http_methods(["GET", "OPTIONS"])

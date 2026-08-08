@@ -8,9 +8,10 @@ const ArrowRight = (props) => (
 );
 
 // The photo-hero topic card: the topic's accent rail, category, title and an
-// Explore call-to-action over its slide photo (falls back to the accent colour
-// when no image exists). Shared by the landing page and the intelligence hub so
-// both surfaces present topics identically.
+// Explore call-to-action over its slide photo. Topics with no photo (the
+// facility registries) fall back to a gradient built from their own colour
+// ramp, so they read as deliberate alongside the photographed ones rather
+// than as flat placeholders.
 export default function TopicCard({ topic, onClick, ctaLabel = "Explore" }) {
   const accent = topic.ramp?.[1] || "#0f766e";
   const image = TOPIC_IMAGE[topic.id];
@@ -22,7 +23,7 @@ export default function TopicCard({ topic, onClick, ctaLabel = "Explore" }) {
         "--topic-accent": accent,
         backgroundImage: image
           ? `linear-gradient(180deg, rgba(2,6,23,0.20) 0%, rgba(2,6,23,0.85) 100%), url('${image}')`
-          : undefined,
+          : `linear-gradient(155deg, ${accent} 0%, rgba(2,6,23,0.92) 78%)`,
       }}
       onClick={onClick}
     >

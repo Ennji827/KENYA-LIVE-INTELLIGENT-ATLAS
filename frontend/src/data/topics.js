@@ -122,6 +122,92 @@ export const TOPICS = [
       "Density of the classified road network — a proxy for connectivity and access to markets and services.",
     liveHint: "Connect the roads authority network dataset or OSM extract.",
   },
+  // ── Facility registries ──────────────────────────────────────────────
+  // Backed by the surveyed GeoPackage point layers in django_backend, counted
+  // per region server-side (/api/facilities/metric/<id>). `aggregation: "sum"`
+  // because a parent's figure is the total of its children, not their average.
+  //
+  // Each registry carries its own `dot` colour for the map's point layer. Only
+  // one registry is ever drawn at a time (the map shows the selected topic and
+  // nothing else), so the colour is an identity signal: it says *which* network
+  // you are looking at without reading the legend. The four hues are kept far
+  // apart from one another, and bright enough to read over both satellite
+  // imagery and the dark end of the topic's own choropleth ramp.
+  {
+    id: "hospitals",
+    label: "Hospitals & Clinics",
+    icon: "🏥",
+    category: "Infrastructure",
+    unit: "facilities",
+    metricLabel: "Health facilities",
+    aggregation: "sum",
+    decimals: 0,
+    range: [20, 900],
+    skew: 1.2,
+    ramp: ["#fef2f2", "#dc2626"],
+    dot: "#ff4d6d", // rose — health
+    higherIsBetter: true,
+    description:
+      "Surveyed health facilities — dispensaries, clinics, health centres and hospitals — mapped to every ward.",
+    liveHint: "Backed by the national health facility registry (13,535 mapped points).",
+  },
+  {
+    id: "schools",
+    label: "Schools",
+    icon: "🏫",
+    category: "Infrastructure",
+    unit: "institutions",
+    metricLabel: "Learning institutions",
+    aggregation: "sum",
+    decimals: 0,
+    range: [100, 3200],
+    skew: 1.1,
+    // Emerald rather than the original indigo: police and administration
+    // offices already occupy the blue–violet end, and three near-identical
+    // choropleths made switching between the registries look like no change.
+    ramp: ["#ecfdf5", "#047857"],
+    dot: "#a3e635", // lime — learning institutions
+    higherIsBetter: true,
+    description:
+      "ECDE, primary, secondary and tertiary institutions across the country, mapped to every ward.",
+    liveHint: "Backed by the national school registry (72,075 mapped points).",
+  },
+  {
+    id: "police_posts",
+    label: "Police Stations",
+    icon: "🚓",
+    category: "Infrastructure",
+    unit: "facilities",
+    metricLabel: "Police facilities",
+    aggregation: "sum",
+    decimals: 0,
+    range: [10, 260],
+    skew: 1.1,
+    ramp: ["#eff6ff", "#1d4ed8"],
+    dot: "#4cc9f0", // cyan — security
+    higherIsBetter: true,
+    description:
+      "Police posts, stations and command facilities — a proxy for security service coverage and response reach.",
+    liveHint: "Backed by the national police facility registry (3,944 mapped points).",
+  },
+  {
+    id: "admin_offices",
+    label: "Administration Offices",
+    icon: "🏛️",
+    category: "Infrastructure",
+    unit: "offices",
+    metricLabel: "Administration offices",
+    aggregation: "sum",
+    decimals: 0,
+    range: [20, 500],
+    skew: 1.1,
+    ramp: ["#f5f3ff", "#6d28d9"],
+    dot: "#c792ea", // violet — administration
+    higherIsBetter: true,
+    description:
+      "National government administration offices — chiefs, sub-chiefs and county commissioners — mapped to every ward.",
+    liveHint: "Backed by the NGAO facility registry (8,486 mapped points).",
+  },
   {
     id: "electricity",
     label: "Electricity",
@@ -386,6 +472,12 @@ export function rampColor(topicId, value, min, max) {
   return mixHex(lo, hi, t);
 }
 
+// Colour of a topic's facility dots on the map. Only the registry topics define
+// one; anything else falls back to white, which reads over any base layer.
+export function dotColor(topicId) {
+  return topicById[topicId]?.dot || "#f8fafc";
+}
+
 function mixHex(a, b, t) {
   const pa = parseHex(a);
   const pb = parseHex(b);
@@ -407,3 +499,20 @@ function parseHex(hex) {
 // Every scaffolded topic reports this until a live source is wired in.
 export const SOURCE_STATUS = "scaffolded";
 export const SOURCE_STATUS_LABEL = "Scaffolded · awaiting verified source";
+
+// Starter prompts for the ask-the-model flow, adapted to the topic so neither
+// the launcher card nor the insights page is ever a blank page. Shared so both
+// offer the same three questions.
+export function suggestedQuestions(topic) {
+  const label = topic.label.toLowerCase();
+  // Phrased around the *regions* rather than the topic, so the sentence stays
+  // grammatical whatever the label is. "Where is <topic> lowest?" reads fine
+  // for weather and rainfall but produces "Where is schools lowest?" for the
+  // count topics, which is exactly the kind of machine-shaped copy that makes
+  // a product feel unfinished.
+  return [
+    `Which regions rank highest for ${label}?`,
+    `Which regions rank lowest for ${label}?`,
+    `What is the average, and how wide is the gap?`,
+  ];
+}

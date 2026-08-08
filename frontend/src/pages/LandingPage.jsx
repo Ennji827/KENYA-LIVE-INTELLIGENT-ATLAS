@@ -36,9 +36,9 @@ export default function LandingPage({
   onSignUp,
   onGoogle,
   onExploreTopic,
+  onReports,
   authenticated = false,
   user = null,
-  onEnterHub,
   onSignOut,
 }) {
   const [active, setActive] = useState(0);
@@ -46,6 +46,12 @@ export default function LandingPage({
 
   const explore = onExploreTopic || onSignUp || (() => {});
   const scrollTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
+  // The topic grid below replaces the old separate hub page, so the CTAs that
+  // used to leave for it now bring the grid into view on this page.
+  const scrollToTopics = () =>
+    document
+      .getElementById("explore-topics")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   const go = useCallback((next) => {
     setActive((prev) => (next + SLIDES.length) % SLIDES.length);
@@ -70,7 +76,6 @@ export default function LandingPage({
       <SiteHeader
         user={authenticated ? user : null}
         onHome={scrollTop}
-        onEnterHub={authenticated ? onEnterHub : undefined}
         onSignIn={authenticated ? undefined : onSignIn}
         onSignUp={authenticated ? undefined : onSignUp}
         onSignOut={authenticated ? onSignOut : undefined}
@@ -84,6 +89,11 @@ export default function LandingPage({
           <h1 className="lp-hero-title">
             Kenya Live <span className="lp-hero-accent">Atlas</span>
           </h1>
+          <p className="lp-hero-sub">
+            Climate, land, infrastructure and population — mapped from national
+            scale down to the ward, with reports and model-written analysis on
+            every view.
+          </p>
         </div>
       </section>
 
@@ -149,7 +159,7 @@ export default function LandingPage({
       </section>
 
       {/* ── Explore topics ── */}
-      <section className="lp-topics">
+      <section className="lp-topics" id="explore-topics">
         <div className="lp-section-inner">
           <h2 className="lp-section-title">Explore Resource intelligence topics</h2>
           <p className="lp-section-sub">
@@ -175,13 +185,13 @@ export default function LandingPage({
             <h2 className="lp-cta-band-title">Ready to explore Kenya's national data?</h2>
             <p className="lp-cta-band-sub">
               {authenticated
-                ? "Jump into the intelligence hub and drill down from national to sub-county level."
+                ? "Open your intelligence reports, or pick a topic below to drill down from national to sub-county level."
                 : "Join researchers, analysts, and decision makers using Kenya Live Atlas."}
             </p>
           </div>
           <div className="lp-cta-band-actions">
             {authenticated ? (
-              <button type="button" className="lp-cta-primary" onClick={onEnterHub}>Enter the hub</button>
+              <button type="button" className="lp-cta-primary" onClick={onReports}>View Reports</button>
             ) : (
               <>
                 <button type="button" className="lp-cta-primary" onClick={onSignUp}>Create free account</button>
@@ -225,7 +235,7 @@ export default function LandingPage({
             <h4>Platform</h4>
             {authenticated ? (
               <>
-                <button type="button" className="lp-footer-link" onClick={onEnterHub}>Open the hub</button>
+                <button type="button" className="lp-footer-link" onClick={scrollToTopics}>Browse topics</button>
                 <button type="button" className="lp-footer-link" onClick={onSignOut}>Sign out</button>
               </>
             ) : (
