@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { getApiBase } from "../utils/api";
 
 const STORAGE_KEY = "aeis_auth_session";
@@ -27,7 +27,7 @@ export function clearAuthSession() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-const GoogleIcon = () => (
+export const GoogleIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
     <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -36,8 +36,15 @@ const GoogleIcon = () => (
   </svg>
 );
 
-function useGoogleGis(onToken) {
+// Google Identity Services — OAuth 2.0 token flow. Unlike One Tap (`prompt()`),
+// `requestAccessToken()` reliably opens the account-chooser popup on a user
+// click every time (no cooldowns / FedCM display moments). We keep the callback
+// in a ref so the latest closure (current citation, view) is always used.
+function useGoogleGis(onAccessToken) {
   const [ready, setReady] = useState(false);
+  const tokenClientRef = useRef(null);
+  const callbackRef = useRef(onAccessToken);
+  callbackRef.current = onAccessToken;
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
   useEffect(() => {
@@ -46,14 +53,16 @@ function useGoogleGis(onToken) {
     function init() {
       if (done) return;
       done = true;
-      window.google.accounts.id.initialize({
+      tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
-        callback: (res) => onToken(res.credential),
-        ux_mode: "popup",
+        scope: "openid email profile",
+        callback: (res) => {
+          if (res?.access_token) callbackRef.current(res.access_token);
+        },
       });
       setReady(true);
     }
-    if (window.google?.accounts?.id) {
+    if (window.google?.accounts?.oauth2) {
       init();
     } else {
       const s = document.createElement("script");
@@ -64,11 +73,13 @@ function useGoogleGis(onToken) {
     }
   }, [clientId]);
 
-  const prompt = () => ready && window.google.accounts.id.prompt();
+  const prompt = () => {
+    if (ready && tokenClientRef.current) tokenClientRef.current.requestAccessToken();
+  };
   return { ready, prompt, enabled: !!clientId };
 }
 
-export default function AuthGateway({ onAuthenticated, initialView = "signin", onBack, onStaff }) {
+export default function AuthGateway({ onAuthenticated, initialView = "signin", onBack, autoGoogle = false }) {
   const [view, setView] = useState(initialView); // signin | register | forgot
 
   // Sign-in fields
@@ -103,19 +114,19 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
     onAuthenticated(payload);
   };
 
-  // â”€â”€ Google GIS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const { prompt: googlePrompt, enabled: googleEnabled } = useGoogleGis(async (idToken) => {
+  // ── Google GIS ──────────────────────────────────────────────
+  const { prompt: googlePrompt, enabled: googleEnabled, ready: googleReady } = useGoogleGis(async (accessToken) => {
     setGBusy(true); setGError("");
     try {
       const r = await fetch(`${getApiBase()}/api/auth/google-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_token: idToken, position: gCitation }),
+        body: JSON.stringify({ access_token: accessToken, position: gCitation }),
       });
       const p = await r.json();
       if (r.ok) { finish({ ...p, auth_mode: "public" }); return; }
       if (p.error?.includes("position")) {
-        setPendingToken(idToken);
+        setPendingToken(accessToken);
         setGError("Select your citation to complete sign-up.");
       } else {
         setGError(p.error || "Google sign-in failed.");
@@ -124,6 +135,22 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
     setGBusy(false);
   });
 
+  const handleGoogleClick = () => {
+    if (!googleEnabled) {
+      setGError("Google sign-in isn't configured yet. Set VITE_GOOGLE_CLIENT_ID to enable it.");
+      return;
+    }
+    setGError("");
+    googlePrompt();
+  };
+
+  // Arrived here from the landing page's "Continue with Google" — open the
+  // popup as soon as the GIS client is ready (no-op until configured).
+  useEffect(() => {
+    if (autoGoogle && googleReady) googlePrompt();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoGoogle, googleReady]);
+
   const completeGoogle = async () => {
     if (!pendingToken || !gCitation) { setGError("Select your citation first."); return; }
     setGBusy(true); setGError("");
@@ -131,7 +158,7 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
       const r = await fetch(`${getApiBase()}/api/auth/google-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_token: pendingToken, position: gCitation }),
+        body: JSON.stringify({ access_token: pendingToken, position: gCitation }),
       });
       const p = await r.json();
       if (r.ok) { finish({ ...p, auth_mode: "public" }); return; }
@@ -140,36 +167,24 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
     setGBusy(false);
   };
 
-  // â”€â”€ Sign in â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Sign in ──────────────────────────────────────────────────
   const handleSignIn = async (e) => {
     e.preventDefault();
     setSiError(""); setSiBusy(true);
     try {
-      const base = getApiBase();
-      const identifier = siEmail.trim();
-      const publicResponse = await fetch(`${base}/api/auth/login`, {
+      const r = await fetch(`${getApiBase()}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: identifier, password: siPassword }),
+        body: JSON.stringify({ email: siEmail.trim(), password: siPassword }),
       });
-
-      let payload = await publicResponse.json();
-      if (publicResponse.ok) { finish({ ...payload, auth_mode: "public" }); return; }
-
-      const nationalResponse = await fetch(`${base}/api/auth/national-login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: identifier, email: identifier, password: siPassword }),
-      });
-      payload = await nationalResponse.json();
-      if (nationalResponse.ok) { finish({ ...payload, auth_mode: payload.role || "national" }); return; }
-
-      setSiError(payload.error || "Invalid email, username, or password.");
+      const payload = await r.json();
+      if (r.ok) { finish({ ...payload, auth_mode: "public" }); return; }
+      setSiError(payload.error || "Invalid email or password.");
     } catch (e) { setSiError(e.message || "Sign in failed."); }
     setSiBusy(false);
   };
 
-  // â”€â”€ Register â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Register ─────────────────────────────────────────────────
   const handleRegister = async (e) => {
     e.preventDefault();
     setRError("");
@@ -190,7 +205,7 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
     setRBusy(false);
   };
 
-  // â”€â”€ Forgot password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Forgot password ──────────────────────────────────────────
   const handleForgot = async (e) => {
     e.preventDefault();
     setFpMsg(""); setFpBusy(true);
@@ -205,7 +220,7 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
     setFpBusy(false);
   };
 
-  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Render ───────────────────────────────────────────────────
   return (
     <div className="auth-shell">
       <div className="auth-card">
@@ -218,50 +233,48 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
           </button>
         )}
 
-        {/* â”€â”€ Sign In â”€â”€ */}
+        {/* ── Sign In ── */}
         {view === "signin" && (
           <>
             <h2 className="auth-heading">Welcome back</h2>
             <p className="auth-sub">Sign in to your account</p>
 
-            {googleEnabled && (
-              <button type="button" className="auth-google-btn" onClick={googlePrompt} disabled={gBusy}>
-                <GoogleIcon />
-                <span>Continue with Google</span>
-              </button>
-            )}
+            <button type="button" className="auth-google-btn" onClick={handleGoogleClick} disabled={gBusy}>
+              <GoogleIcon />
+              <span>Continue with Google</span>
+            </button>
 
             {pendingToken && (
               <div className="auth-field">
                 <label htmlFor="si-gcit">Select your citation to finish sign-up</label>
                 <select id="si-gcit" value={gCitation} onChange={(e) => setGCitation(e.target.value)}>
-                  <option value="">â€” select citation â€”</option>
+                  <option value="">— select citation —</option>
                   {CITATIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
                 <button type="button" className="auth-btn" style={{ marginTop: 8 }} onClick={completeGoogle} disabled={!gCitation || gBusy}>
-                  {gBusy ? "Please waitâ€¦" : "Complete sign-up"}
+                  {gBusy ? "Please wait…" : "Complete sign-up"}
                 </button>
               </div>
             )}
             {gError && <p className="auth-msg error">{gError}</p>}
 
-            {googleEnabled && <div className="auth-divider"><span>or</span></div>}
+            <div className="auth-divider"><span>or</span></div>
 
             <form onSubmit={handleSignIn} className="auth-form">
               <div className="auth-field">
-                <label htmlFor="si-email">Email address or ministry username</label>
-                <input id="si-email" type="text" value={siEmail} onChange={(e) => setSiEmail(e.target.value)} placeholder="you@example.com or ministry_command" autoComplete="username" required />
+                <label htmlFor="si-email">Email address</label>
+                <input id="si-email" type="email" value={siEmail} onChange={(e) => setSiEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" required />
               </div>
               <div className="auth-field">
                 <label htmlFor="si-pw">Password</label>
-                <input id="si-pw" type="password" value={siPassword} onChange={(e) => setSiPassword(e.target.value)} placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" autoComplete="current-password" required />
+                <input id="si-pw" type="password" value={siPassword} onChange={(e) => setSiPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" required />
                 <button type="button" className="auth-forgot-link" onClick={() => { setView("forgot"); setFpEmail(siEmail); }}>
                   Forgot password?
                 </button>
               </div>
               {siError && <p className="auth-msg error">{siError}</p>}
               <button type="submit" className="auth-btn" disabled={siBusy}>
-                {siBusy ? "Signing inâ€¦" : "Sign In"}
+                {siBusy ? "Signing in…" : "Sign In"}
               </button>
             </form>
 
@@ -269,42 +282,35 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
               Don't have an account?{" "}
               <button type="button" className="auth-link" onClick={() => setView("register")}>Create account</button>
             </p>
-            {onStaff && (
-              <p className="auth-switch">
-                <button type="button" className="auth-link" onClick={onStaff}>Government / staff access â†’</button>
-              </p>
-            )}
           </>
         )}
 
-        {/* â”€â”€ Register â”€â”€ */}
+        {/* ── Register ── */}
         {view === "register" && (
           <>
             <h2 className="auth-heading">Create account</h2>
-            <p className="auth-sub">Join K-L-I-A today</p>
+            <p className="auth-sub">Join Kenya Live Atlas today</p>
 
-            {googleEnabled && (
-              <button type="button" className="auth-google-btn" onClick={googlePrompt} disabled={gBusy}>
-                <GoogleIcon />
-                <span>Sign up with Google</span>
-              </button>
-            )}
+            <button type="button" className="auth-google-btn" onClick={handleGoogleClick} disabled={gBusy}>
+              <GoogleIcon />
+              <span>Sign up with Google</span>
+            </button>
 
             {pendingToken && (
               <div className="auth-field">
                 <label htmlFor="reg-gcit">Select your citation to finish sign-up</label>
                 <select id="reg-gcit" value={gCitation} onChange={(e) => setGCitation(e.target.value)}>
-                  <option value="">â€” select citation â€”</option>
+                  <option value="">— select citation —</option>
                   {CITATIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
                 <button type="button" className="auth-btn" style={{ marginTop: 8 }} onClick={completeGoogle} disabled={!gCitation || gBusy}>
-                  {gBusy ? "Please waitâ€¦" : "Complete sign-up"}
+                  {gBusy ? "Please wait…" : "Complete sign-up"}
                 </button>
               </div>
             )}
             {gError && <p className="auth-msg error">{gError}</p>}
 
-            {googleEnabled && <div className="auth-divider"><span>or</span></div>}
+            <div className="auth-divider"><span>or</span></div>
 
             <form onSubmit={handleRegister} className="auth-form">
               <div className="auth-field-row">
@@ -332,13 +338,13 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
               <div className="auth-field">
                 <label htmlFor="r-cit">Citation</label>
                 <select id="r-cit" value={rCitation} onChange={(e) => setRCitation(e.target.value)} required>
-                  <option value="">â€” select your citation â€”</option>
+                  <option value="">— select your citation —</option>
                   {CITATIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
               {rError && <p className="auth-msg error">{rError}</p>}
               <button type="submit" className="auth-btn" disabled={rBusy}>
-                {rBusy ? "Creating accountâ€¦" : "Create Account"}
+                {rBusy ? "Creating account…" : "Create Account"}
               </button>
             </form>
 
@@ -349,7 +355,7 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
           </>
         )}
 
-        {/* â”€â”€ Forgot password â”€â”€ */}
+        {/* ── Forgot password ── */}
         {view === "forgot" && (
           <>
             <h2 className="auth-heading">Reset password</h2>
@@ -369,13 +375,13 @@ export default function AuthGateway({ onAuthenticated, initialView = "signin", o
                   <input id="fp-em" type="email" value={fpEmail} onChange={(e) => setFpEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" required />
                 </div>
                 <button type="submit" className="auth-btn" disabled={fpBusy}>
-                  {fpBusy ? "Sendingâ€¦" : "Send reset link"}
+                  {fpBusy ? "Sending…" : "Send reset link"}
                 </button>
               </form>
             )}
 
             <p className="auth-switch">
-              <button type="button" className="auth-link" onClick={() => setView("signin")}>â† Back to sign in</button>
+              <button type="button" className="auth-link" onClick={() => setView("signin")}>← Back to sign in</button>
             </p>
           </>
         )}

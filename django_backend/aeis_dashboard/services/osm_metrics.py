@@ -3,9 +3,9 @@
 This backs three of the intelligence topics with a real, keyless open data
 source instead of the deterministic scaffolding in the frontend's topics.js:
 
-    roads         -> classified road density  (km per 1000 kmÂ²)
+    roads         -> classified road density  (km per 1000 km²)
     forests       -> forest/wood cover         (% of county area)
-    water_bodies  -> surface water area        (kmÂ²)
+    water_bodies  -> surface water area        (km²)
 
 The heavy lifting (boundary loading, bounding boxes, spherical polygon area,
 point-in-polygon, the Overpass HTTP call) already exists in `domain`; this
@@ -40,7 +40,7 @@ OSM_TOPIC_CONFIG = {
             'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential)$"]',
         ],
         "metric": "length_density",
-        "unit": "km/1000 kmÂ²",
+        "unit": "km/1000 km²",
     },
     "forests": {
         "selectors": [
@@ -57,13 +57,13 @@ OSM_TOPIC_CONFIG = {
             'way["landuse"="reservoir"]',
         ],
         "metric": "area_km2",
-        "unit": "kmÂ²",
+        "unit": "km²",
     },
 }
 
 SUPPORTED_TOPICS = tuple(OSM_TOPIC_CONFIG)
 
-# Cache each county value for a day â€” OSM base geometry changes slowly and these
+# Cache each county value for a day — OSM base geometry changes slowly and these
 # queries are expensive. National fan-out uses a small pool to be a good citizen.
 _COUNTY_TTL_SECONDS = 24 * 60 * 60
 _MAX_WORKERS = 4
@@ -124,7 +124,7 @@ def _request_overpass(query: str) -> dict:
             data=body,
             headers={
                 "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
-                "User-Agent": "K-L-I-A/0.1 topic metrics (OpenStreetMap)",
+                "User-Agent": "KenyaLiveAtlas/0.1 topic metrics (OpenStreetMap)",
             },
             method="POST",
         )

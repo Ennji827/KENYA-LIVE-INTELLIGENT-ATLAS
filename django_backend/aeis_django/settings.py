@@ -3,6 +3,8 @@ import secrets
 import sys
 from pathlib import Path
 
+from .env import env
+
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BASE_DIR.parent
@@ -19,7 +21,7 @@ def _load_env_files(*names: str) -> None:
     resolved under ``PROJECT_ROOT``) using ``setdefault``, so a variable already
     present in the real environment is never overridden. Files are applied in
     order, so an earlier file wins over a later one; the real environment always
-    wins over both â€” deployment secrets are never clobbered by a local file.
+    wins over both — deployment secrets are never clobbered by a local file.
     """
 
     for name in names:
@@ -47,11 +49,11 @@ def _load_env_files(*names: str) -> None:
 # gitignored real-secrets file) takes precedence over an optional plain `.env`.
 _load_env_files(".env.local", ".env")
 
-DEBUG = os.environ.get("AEIS_DJANGO_DEBUG", "1").lower() in {"1", "true", "yes", "on"}
-SECRET_KEY = os.environ.get("AEIS_DJANGO_SECRET_KEY", "")
+DEBUG = env("KLA_DJANGO_DEBUG", "1").lower() in {"1", "true", "yes", "on"}
+SECRET_KEY = env("KLA_DJANGO_SECRET_KEY", "")
 if not SECRET_KEY:
     if not DEBUG:
-        raise RuntimeError("AEIS_DJANGO_SECRET_KEY must be set when AEIS_DJANGO_DEBUG=0.")
+        raise RuntimeError("KLA_DJANGO_SECRET_KEY must be set when KLA_DJANGO_DEBUG=0.")
     secret_path = RUNTIME_DIR / "django-secret-key"
     if secret_path.exists():
         SECRET_KEY = secret_path.read_text(encoding="utf-8").strip()
@@ -62,7 +64,7 @@ if not SECRET_KEY:
 default_hosts = "localhost,127.0.0.1,[::1],*" if DEBUG else "localhost,127.0.0.1,[::1]"
 ALLOWED_HOSTS = [
     host.strip()
-    for host in os.environ.get("AEIS_ALLOWED_HOSTS", default_hosts).split(",")
+    for host in env("KLA_ALLOWED_HOSTS", default_hosts).split(",")
     if host.strip()
 ]
 
@@ -87,20 +89,20 @@ MIDDLEWARE = [
     "aeis_dashboard.middleware.RequestTelemetryMiddleware",
 ]
 
-database_engine = os.environ.get("AEIS_DB_ENGINE", "sqlite").strip().lower()
+database_engine = env("KLA_DB_ENGINE", "sqlite").strip().lower()
 if database_engine in {"postgres", "postgresql", "postgis"}:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ.get("AEIS_DB_NAME", "aeis_k"),
-            "USER": os.environ.get("AEIS_DB_USER", "aeis_k"),
-            "PASSWORD": os.environ.get("AEIS_DB_PASSWORD", ""),
-            "HOST": os.environ.get("AEIS_DB_HOST", "127.0.0.1"),
-            "PORT": os.environ.get("AEIS_DB_PORT", "5432"),
-            "CONN_MAX_AGE": int(os.environ.get("AEIS_DB_CONN_MAX_AGE", "60")),
+            "NAME": env("KLA_DB_NAME", "aeis_k"),
+            "USER": env("KLA_DB_USER", "aeis_k"),
+            "PASSWORD": env("KLA_DB_PASSWORD", ""),
+            "HOST": env("KLA_DB_HOST", "127.0.0.1"),
+            "PORT": env("KLA_DB_PORT", "5432"),
+            "CONN_MAX_AGE": int(env("KLA_DB_CONN_MAX_AGE", "60")),
             "CONN_HEALTH_CHECKS": True,
             "OPTIONS": {
-                "sslmode": os.environ.get("AEIS_DB_SSLMODE", "prefer"),
+                "sslmode": env("KLA_DB_SSLMODE", "prefer"),
             },
         }
     }
@@ -108,7 +110,7 @@ else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": os.environ.get("AEIS_DB_PATH", str(RUNTIME_DIR / "klia.sqlite3")),
+            "NAME": env("KLA_DB_PATH", str(RUNTIME_DIR / "aeis.sqlite3")),
             "OPTIONS": {"timeout": 20},
         }
     }
@@ -131,8 +133,8 @@ CSRF_COOKIE_SECURE = not DEBUG
 X_FRAME_OPTIONS = "DENY"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
-SECURE_SSL_REDIRECT = os.environ.get("AEIS_SECURE_SSL_REDIRECT", "0").lower() in {"1", "true", "yes", "on"}
-SECURE_HSTS_SECONDS = int(os.environ.get("AEIS_SECURE_HSTS_SECONDS", "0"))
+SECURE_SSL_REDIRECT = env("KLA_SECURE_SSL_REDIRECT", "0").lower() in {"1", "true", "yes", "on"}
+SECURE_HSTS_SECONDS = int(env("KLA_SECURE_HSTS_SECONDS", "0"))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
 SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0
 
@@ -140,7 +142,7 @@ if "test" in sys.argv:
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "k-l-i-a-tests",
+            "LOCATION": "aeis-k-tests",
             "TIMEOUT": 900,
         }
     }
@@ -157,22 +159,22 @@ else:
         }
     }
 
-CORS_ALLOWED_ORIGIN = os.environ.get("AEIS_CORS_ALLOWED_ORIGIN", "").strip()
+CORS_ALLOWED_ORIGIN = env("KLA_CORS_ALLOWED_ORIGIN", "").strip()
 
-# â”€â”€ M-PESA / Safaricom Daraja payment gateway â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── M-PESA / Safaricom Daraja payment gateway ───────────────────────────
 # When the consumer key/secret/passkey are absent the payment service runs
 # in simulation mode so the report-payment flow is fully demoable.
-MPESA_ENV = os.environ.get("AEIS_MPESA_ENV", "sandbox").strip().lower()
-MPESA_CONSUMER_KEY = os.environ.get("AEIS_MPESA_CONSUMER_KEY", "").strip()
-MPESA_CONSUMER_SECRET = os.environ.get("AEIS_MPESA_CONSUMER_SECRET", "").strip()
-MPESA_SHORTCODE = os.environ.get("AEIS_MPESA_SHORTCODE", "174379").strip()
-MPESA_PAYBILL = os.environ.get("AEIS_MPESA_PAYBILL", "").strip() or MPESA_SHORTCODE
-MPESA_PASSKEY = os.environ.get("AEIS_MPESA_PASSKEY", "").strip()
-MPESA_CALLBACK_URL = os.environ.get("AEIS_MPESA_CALLBACK_URL", "").strip()
-MPESA_ACCOUNT_PREFIX = os.environ.get("AEIS_MPESA_ACCOUNT_PREFIX", "KLIA").strip()
-MPESA_BUSINESS_NAME = os.environ.get("AEIS_MPESA_BUSINESS_NAME", "Kenya Space Agency").strip()
+MPESA_ENV = env("KLA_MPESA_ENV", "sandbox").strip().lower()
+MPESA_CONSUMER_KEY = env("KLA_MPESA_CONSUMER_KEY", "").strip()
+MPESA_CONSUMER_SECRET = env("KLA_MPESA_CONSUMER_SECRET", "").strip()
+MPESA_SHORTCODE = env("KLA_MPESA_SHORTCODE", "174379").strip()
+MPESA_PAYBILL = env("KLA_MPESA_PAYBILL", "").strip() or MPESA_SHORTCODE
+MPESA_PASSKEY = env("KLA_MPESA_PASSKEY", "").strip()
+MPESA_CALLBACK_URL = env("KLA_MPESA_CALLBACK_URL", "").strip()
+MPESA_ACCOUNT_PREFIX = env("KLA_MPESA_ACCOUNT_PREFIX", "AEISK").strip()
+MPESA_BUSINESS_NAME = env("KLA_MPESA_BUSINESS_NAME", "Kenya Space Agency").strip()
 try:
-    REPORT_PRICE_KES = int(os.environ.get("AEIS_REPORT_PRICE_KES", "50"))
+    REPORT_PRICE_KES = int(env("KLA_REPORT_PRICE_KES", "50"))
 except ValueError:
     REPORT_PRICE_KES = 50
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
@@ -195,12 +197,12 @@ LOGGING = {
     "loggers": {
         "aeis.request": {
             "handlers": ["console"],
-            "level": os.environ.get("AEIS_LOG_LEVEL", "INFO"),
+            "level": env("KLA_LOG_LEVEL", "INFO"),
             "propagate": False,
         },
         "aeis.jobs": {
             "handlers": ["console"],
-            "level": os.environ.get("AEIS_LOG_LEVEL", "INFO"),
+            "level": env("KLA_LOG_LEVEL", "INFO"),
             "propagate": False,
         }
     },

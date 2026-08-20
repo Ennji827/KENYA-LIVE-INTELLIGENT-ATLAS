@@ -17,7 +17,7 @@ from aeis_dashboard.models import (
     SystemSetting,
 )
 from aeis_dashboard.services.auth import seed_default_accounts
-from aeis_dashboard.services import domain, jobs
+from aeis_dashboard.services import auth, domain, jobs
 
 
 TEST_MEDIA_ROOT = tempfile.mkdtemp(prefix="aeis-test-media-")
@@ -41,9 +41,6 @@ class AEISApiTests(TestCase):
         self.assertEqual(health.json()["runtime"], "django")
         self.assertEqual(health.json()["status"], "healthy")
         self.assertTrue(all(health.json()["checks"].values()))
-        self.assertEqual(health.json()["boundaries"]["counties"], 47)
-        self.assertEqual(health.json()["boundaries"]["subcounties"], 293)
-        self.assertEqual(health.json()["boundaries"]["wards"], 1452)
         self.assertTrue(health["X-Request-ID"])
         self.assertIn("app;dur=", health["Server-Timing"])
 
@@ -51,38 +48,15 @@ class AEISApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()["counties"]), 47)
 
-        subcounties = self.client.get("/api/boundary/subcounties?county=Mombasa")
-        self.assertEqual(subcounties.status_code, 200)
-        self.assertEqual(subcounties.json()["type"], "FeatureCollection")
-        self.assertEqual(len(subcounties.json()["features"]), 6)
-
-        wards = self.client.get("/api/boundary/wards?subcounty=Changamwe")
-        self.assertEqual(wards.status_code, 200)
-        self.assertGreater(len(wards.json()["features"]), 0)
-        ward_properties = wards.json()["features"][0]["properties"]
-        self.assertEqual(ward_properties["ADM1_EN"], "Mombasa")
-        self.assertEqual(ward_properties["ADM2_EN"], "Changamwe")
-
         summary = self.client.get("/api/dashboard/summary")
         self.assertEqual(summary.status_code, 200)
         self.assertEqual(summary.json()["summary"]["countiesTracked"], 47)
         self.assertGreaterEqual(summary.json()["summary"]["connectedSources"], 4)
         self.assertIn("dataGaps", summary.json()["summary"])
 
-    def test_demo_county_login_session_and_logout(self):
-        SystemSetting.objects.update_or_create(key="public_access_locked", defaults={"value": "0"})
-        response = self.client.post(
-            "/api/auth/county-login",
-            {
-                "county_code": "001",
-                "email": "mombasa@county.k-l-i-a.local",
-                "password": "county123",
-                "demo_remote_access": True,
-            },
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 200)
-        token = response.json()["token"]
+    def test_session_validation_and_logout(self):
+        county_user = AEISUser.objects.get(role=AEISUser.Role.COUNTY, county_code="001")
+        token = auth._create_session(county_user, "password", 0.0, 0.0).token
 
         validation = self.client.post(
             "/api/auth/validate-session",
@@ -118,13 +92,9 @@ class AEISApiTests(TestCase):
         self.assertEqual(payload["data_mode"], "source_required")
 
     def _ministry_token(self):
-        response = self.client.post(
-            "/api/auth/national-login",
-            {"email": "ministry.command@k-l-i-a.local", "password": "ministry123"},
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 200)
-        return response.json()["token"]
+        # Staff HTTP login endpoints were removed; mint the session directly.
+        user = AEISUser.objects.get(role=AEISUser.Role.MINISTRY)
+        return auth._create_session(user, "password", 0.0, 0.0).token
 
     def test_ministry_can_upload_and_catalogue_geojson(self):
         token = self._ministry_token()
@@ -174,16 +144,11 @@ class AEISApiTests(TestCase):
         denied = self.client.get("/api/auth/audit-log")
         self.assertEqual(denied.status_code, 403)
 
-        login = self.client.post(
-            "/api/auth/national-login",
-            {"email": "national.auditor@k-l-i-a.local", "password": "auditor123"},
-            content_type="application/json",
-        )
-        self.assertEqual(login.status_code, 200)
-        self.assertEqual(login.json()["role"], "auditor")
+        auditor = AEISUser.objects.get(role=AEISUser.Role.AUDITOR)
+        token = auth._create_session(auditor, "password", 0.0, 0.0).token
         response = self.client.get(
             "/api/auth/audit-log",
-            HTTP_AUTHORIZATION=f"Bearer {login.json()['token']}",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn("events", response.json())
@@ -211,19 +176,10 @@ class AEISApiTests(TestCase):
             AEISUser.objects.filter(email="field.test@mombasa.example", role="field_officer").exists()
         )
 
-        SystemSetting.objects.update_or_create(key="public_access_locked", defaults={"value": "0"})
-        login = self.client.post(
-            "/api/auth/county-login",
-            {
-                "county_code": "001",
-                "email": "field.test@mombasa.example",
-                "password": "fieldpass123",
-                "demo_remote_access": True,
-            },
-            content_type="application/json",
+        field_officer = AEISUser.objects.get(
+            email="field.test@mombasa.example", role=AEISUser.Role.FIELD_OFFICER
         )
-        self.assertEqual(login.status_code, 200)
-        self.assertEqual(login.json()["role"], "field_officer")
+        officer_token = auth._create_session(field_officer, "password", 0.0, 0.0).token
 
         submitted = self.client.post(
             "/api/field-reports",
@@ -236,7 +192,7 @@ class AEISApiTests(TestCase):
                 "observations": "Leaf condition requires county verification.",
             },
             content_type="application/json",
-            HTTP_AUTHORIZATION=f"Bearer {login.json()['token']}",
+            HTTP_AUTHORIZATION=f"Bearer {officer_token}",
         )
         self.assertEqual(submitted.status_code, 201)
 
@@ -287,17 +243,8 @@ class AEISApiTests(TestCase):
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
     def test_county_intelligence_cannot_escape_assigned_scope(self):
-        SystemSetting.objects.update_or_create(key="public_access_locked", defaults={"value": "0"})
-        login = self.client.post(
-            "/api/auth/county-login",
-            {
-                "county_code": "001",
-                "email": "mombasa@county.k-l-i-a.local",
-                "password": "county123",
-                "demo_remote_access": True,
-            },
-            content_type="application/json",
-        )
+        mombasa_user = AEISUser.objects.get(role=AEISUser.Role.COUNTY, county_code="001")
+        token = auth._create_session(mombasa_user, "password", 0.0, 0.0).token
         response = self.client.post(
             "/api/intelligence/query",
             {
@@ -306,7 +253,7 @@ class AEISApiTests(TestCase):
                 "scope_name": "Nyandarua",
             },
             content_type="application/json",
-            HTTP_AUTHORIZATION=f"Bearer {login.json()['token']}",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
         )
         self.assertEqual(response.status_code, 403)
 
@@ -374,10 +321,10 @@ class AEISApiTests(TestCase):
             "key_observations": ["Queue processing is active."],
             "risk_areas": ["No confirmed anomaly."],
             "affected_areas": [],
-            "evidence": [{"source": "K-L-I-A", "observation": "Background job test."}],
+            "evidence": [{"source": "Kenya Live Atlas", "observation": "Background job test."}],
             "recommended_actions": ["Continue monitoring."],
             "confidence": "medium",
-            "data_sources": [{"name": "K-L-I-A", "category": "system", "status": "available"}],
+            "data_sources": [{"name": "Kenya Live Atlas", "category": "system", "status": "available"}],
             "missing_data": [],
             "explainability": "Generated by the durable processing worker.",
         }

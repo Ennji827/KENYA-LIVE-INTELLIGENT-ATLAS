@@ -1,9 +1,39 @@
 <!DOCTYPE html>
-<html lang="en"> 
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>K-L-I-A Intelligence Dashboard</title>
+  <!-- viewport-fit=cover so the fixed backdrop reaches under a notch. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Kenya Live Atlas — national geospatial and resource intelligence: climate, land, infrastructure and population mapped from national scale to the ward." />
+  <!-- Tints the browser chrome on mobile to match the app header. -->
+  <meta name="theme-color" content="#0f4c81" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0a2540" media="(prefers-color-scheme: dark)" />
+  <title>Kenya Live Atlas</title>
+  <script>
+    // Resolve the colour scheme before first paint.
+    //
+    // React sets data-theme in an effect, which runs after the first frame —
+    // long enough for a dark-mode visitor to get a full white flash on every
+    // load. This is the same logic as utils/theme.js, inlined and blocking so
+    // the attribute is already correct when the first pixel is drawn.
+    (function () {
+      try {
+        // Nothing stored (or a stale value) means no explicit choice has been
+        // made, so the OS decides.
+        var stored = localStorage.getItem("kla.theme");
+        var pinned = stored === "light" || stored === "dark" ? stored : null;
+        var dark =
+          pinned === "dark" ||
+          (pinned === null &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        var scheme = dark ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", scheme);
+        document.documentElement.style.colorScheme = scheme;
+      } catch (e) {
+        // Storage or matchMedia unavailable — light is the correct default.
+      }
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>

@@ -3,7 +3,6 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import math
-import os
 import socket
 import threading
 import time
@@ -15,24 +14,22 @@ from urllib.request import Request, urlopen
 
 from django.core.cache import cache
 
+from aeis_django.env import env, env_flag, env_is_set
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = PROJECT_ROOT / "frontend" / "public" / "data"
 SESSION_SECONDS = 8 * 60 * 60
-DEFAULT_COUNTY_PASSWORD = "county123"
-DEFAULT_MINISTRY_PASSWORD = "ministry123"
-DEFAULT_ANALYST_PASSWORD = "analyst123"
-DEFAULT_AUDITOR_PASSWORD = "auditor123"
 
-
-def env_flag(name: str, default: bool = False) -> bool:
-    value = os.environ.get(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+# Demo/seed passwords. Overridable via environment so deployments can set real
+# credentials without touching code; the literals remain as local-dev fallbacks.
+DEFAULT_COUNTY_PASSWORD = env("KLA_COUNTY_PASSWORD", "county123").strip() or "county123"
+DEFAULT_MINISTRY_PASSWORD = env("KLA_MINISTRY_PASSWORD", "ministry123").strip() or "ministry123"
+DEFAULT_ANALYST_PASSWORD = env("KLA_ANALYST_PASSWORD", "analyst123").strip() or "analyst123"
+DEFAULT_AUDITOR_PASSWORD = env("KLA_AUDITOR_PASSWORD", "auditor123").strip() or "auditor123"
 
 
 def public_access_mode() -> bool:
-    return env_flag("AEIS_PUBLIC_ACCESS", False)
+    return env_flag("KLA_PUBLIC_ACCESS", False)
 
 
 def get_system_setting(key: str, default: str = "") -> str:
@@ -54,14 +51,14 @@ def public_access_locked() -> bool:
 
 
 def show_demo_credentials() -> bool:
-    if os.environ.get("AEIS_SHOW_DEMO_CREDENTIALS") is not None:
-        return env_flag("AEIS_SHOW_DEMO_CREDENTIALS", False)
+    if env_is_set("KLA_SHOW_DEMO_CREDENTIALS"):
+        return env_flag("KLA_SHOW_DEMO_CREDENTIALS", False)
     return not public_access_locked()
 
 
 def remote_county_demo_enabled() -> bool:
-    if os.environ.get("AEIS_ALLOW_REMOTE_DEMO") is not None:
-        return env_flag("AEIS_ALLOW_REMOTE_DEMO", False)
+    if env_is_set("KLA_ALLOW_REMOTE_DEMO"):
+        return env_flag("KLA_ALLOW_REMOTE_DEMO", False)
     return not public_access_locked()
 
 NATIONAL_AUTH_ACCOUNTS = [
@@ -69,11 +66,11 @@ NATIONAL_AUTH_ACCOUNTS = [
         "county_code": "000",
         "county_name": "National",
         "username": "ministry_command",
-        "email": "ministry.command@k-l-i-a.local",
+        "email": "ministry.command@aeis-k.local",
         "role": "ministry",
         "provider": "password",
         "password": DEFAULT_MINISTRY_PASSWORD,
-        "command_center": "K-L-I-A National Command Center",
+        "command_center": "Kenya Live Atlas National Command Center",
         "boundary_scope": "national",
         "permissions": [
             "national_command_center",
@@ -87,11 +84,11 @@ NATIONAL_AUTH_ACCOUNTS = [
         "county_code": "000",
         "county_name": "National",
         "username": "national_analyst",
-        "email": "national.analyst@k-l-i-a.local",
+        "email": "national.analyst@aeis-k.local",
         "role": "analyst",
         "provider": "password",
         "password": DEFAULT_ANALYST_PASSWORD,
-        "command_center": "K-L-I-A National Intelligence Analyst",
+        "command_center": "Kenya Live Atlas National Intelligence Analyst",
         "boundary_scope": "national_read_only",
         "permissions": [
             "all_county_read",
@@ -104,11 +101,11 @@ NATIONAL_AUTH_ACCOUNTS = [
         "county_code": "000",
         "county_name": "National",
         "username": "national_auditor",
-        "email": "national.auditor@k-l-i-a.local",
+        "email": "national.auditor@aeis-k.local",
         "role": "auditor",
         "provider": "password",
         "password": DEFAULT_AUDITOR_PASSWORD,
-        "command_center": "K-L-I-A National Audit Workspace",
+        "command_center": "Kenya Live Atlas National Audit Workspace",
         "boundary_scope": "national_read_only",
         "permissions": [
             "audit_read",
@@ -173,8 +170,6 @@ _GEOJSON_CACHE: dict[str, dict] = {}
 _GEOJSON_LOCK = threading.RLock()
 _COUNTY_WARD_CACHE: dict[str, int] = {}
 _WARD_CENTER_CACHE: list[tuple[float, float]] | None = None
-_BOUNDARY_HIERARCHY_CACHE: dict | None = None
-_BOUNDARY_HIERARCHY_LOCK = threading.Lock()
 _OSM_SEGMENT_CACHE: dict[str, dict] = {}
 _COUNTY_LIST_CACHE: list[dict] | None = None
 _COUNTY_LIST_LOCK = threading.Lock()
@@ -184,21 +179,21 @@ _COUNTRY_ANALYSIS_LOCK = threading.Lock()
 GEE_LAYER_CONFIG = {
     "geeNdvi": {
         "label": "GEE Sentinel-2 NDVI",
-        "env": "AEIS_GEE_NDVI_TILE_URL",
+        "env": "KLA_GEE_NDVI_TILE_URL",
         "type": "vegetation",
         "opacity": 0.72,
         "note": "Earth Engine Sentinel-2 NDVI tile URL from image.getMapId(...).tile_fetcher.url_format.",
     },
     "geeNdwi": {
         "label": "GEE Sentinel-2 NDWI",
-        "env": "AEIS_GEE_NDWI_TILE_URL",
+        "env": "KLA_GEE_NDWI_TILE_URL",
         "type": "moisture",
         "opacity": 0.72,
         "note": "Earth Engine Sentinel-2 NDWI or vegetation/water NDWI tile URL from an authenticated backend.",
     },
     "geeLst": {
         "label": "GEE Landsat LST",
-        "env": "AEIS_GEE_LST_TILE_URL",
+        "env": "KLA_GEE_LST_TILE_URL",
         "type": "thermal",
         "opacity": 0.68,
         "note": "Earth Engine Landsat land-surface-temperature tile URL from an authenticated backend.",
@@ -368,7 +363,7 @@ def dashboard_summary_payload() -> dict:
     }
     return {
         "summary": {
-            "title": "K-L-I-A Intelligence Dashboard",
+            "title": "Kenya Live Atlas Intelligence Dashboard",
             "subtitle": "Climate, Water and Land Intelligence System for Kenya",
             **operational,
             "countiesTracked": count,
@@ -504,7 +499,7 @@ def system_access_payload() -> dict:
         "local_live_url": "http://127.0.0.1:8000",
         "frontend_dev_url": f"http://{lan_ip}:5173",
         "backend_url": f"http://{lan_ip}:8000",
-        "public_url": os.environ.get("AEIS_PUBLIC_URL", "").strip(),
+        "public_url": env("KLA_PUBLIC_URL", "").strip(),
         "public_access": {
             "enabled": public_access_mode(),
             "locked": public_access_locked(),
@@ -539,7 +534,7 @@ def gee_layers_payload() -> dict:
     layers = {}
     configured_count = 0
     for key, config in GEE_LAYER_CONFIG.items():
-        url_template = os.environ.get(config["env"], "").strip()
+        url_template = (env(config["env"], "") or "").strip()
         configured = bool(url_template)
         if configured:
             configured_count += 1
@@ -685,7 +680,7 @@ def fetch_weather_for_county(feature: dict) -> dict:
     try:
         request = Request(
             open_meteo_url(latitude, longitude),
-            headers={"User-Agent": "K-L-I-A/0.1 county weather forecast"},
+            headers={"User-Agent": "KenyaLiveAtlas/0.1 county weather forecast"},
         )
         with urlopen(request, timeout=4) as response:
             provider_payload = json.loads(response.read().decode("utf-8"))
@@ -1023,12 +1018,12 @@ def system_actualization_payload() -> dict:
     ]
     next_actions = [
         "Use /api/indices/evaluate to validate real band values from a verified county raster.",
-        "Start with a verified Nyandarua raster extract, then compare K-L-I-A outcome against field reports.",
+        "Start with a verified Nyandarua raster extract, then compare Kenya Live Atlas outcome against field reports.",
         "Keep demo remote access for presentation only; use GPS/login audit for operational county access.",
     ]
     return {
         "mode": "actualization_readiness",
-        "system": "K-L-I-A Intelligence Dashboard",
+        "system": "Kenya Live Atlas Intelligence Dashboard",
         "readiness": readiness,
         "status": "field_test_ready" if readiness >= 65 else "setup_in_progress",
         "providers": providers,
@@ -1148,7 +1143,7 @@ def find_ward(identifier: str) -> dict | None:
             properties.get("NAME"),
         ]
         if needle in {str(value).strip().lower() for value in candidates if value}:
-            return enriched_ward_feature(feature)
+            return feature
     return None
 
 
@@ -1250,8 +1245,6 @@ def bbox(feature: dict) -> tuple[float, float, float, float]:
                 collect(item)
 
     collect(feature.get("geometry", {}).get("coordinates", []))
-    if not coords:
-        return 0.0, 0.0, 0.0, 0.0
     lngs = [point[0] for point in coords]
     lats = [point[1] for point in coords]
     return min(lngs), min(lats), max(lngs), max(lats)
@@ -1351,225 +1344,6 @@ def point_in_feature(point: tuple[float, float], feature: dict) -> bool:
     return False
 
 
-def _feature_collection(features: list[dict], name: str) -> dict:
-    return {
-        "type": "FeatureCollection",
-        "name": name,
-        "features": features,
-        "generated_at": now_iso(),
-    }
-
-
-def _with_properties(feature: dict, extra: dict) -> dict:
-    return {
-        **feature,
-        "properties": {
-            **(feature.get("properties") or {}),
-            **{key: value for key, value in extra.items() if value not in (None, "")},
-        },
-    }
-
-
-def feature_points(feature: dict, limit: int = 80) -> list[tuple[float, float]]:
-    points: list[tuple[float, float]] = []
-
-    def collect(value):
-        if isinstance(value, list) and len(value) >= 2 and isinstance(value[0], (int, float)):
-            points.append((float(value[0]), float(value[1])))
-            return
-        if isinstance(value, list):
-            for item in value:
-                collect(item)
-
-    collect((feature.get("geometry") or {}).get("coordinates", []))
-    if not points:
-        return []
-    if len(points) <= limit:
-        return points
-    step = max(1, len(points) // limit)
-    return points[::step][:limit]
-
-
-def best_parent_by_sampled_points(feature: dict, rows: list[dict]) -> dict | None:
-    points = feature_points(feature)
-    if not points:
-        return None
-    best_row = None
-    best_hits = 0
-    for row in rows:
-        hits = sum(
-            1
-            for point in points
-            if point_in_bbox(point, row["bbox"]) and point_in_feature(point, row["feature"])
-        )
-        if hits > best_hits:
-            best_row = row
-            best_hits = hits
-    return best_row
-
-
-def boundary_health_summary() -> dict:
-    counts = {
-        "counties": len(counties()),
-        "subcounties": len(subcounties()),
-        "wards": len(wards()),
-    }
-    return {
-        **counts,
-        "ready": counts["counties"] > 0 and counts["subcounties"] > 0 and counts["wards"] > 0,
-        "files": {
-            "counties": str(DATA_DIR / "counties.geojson"),
-            "subcounties": str(DATA_DIR / "sub_counties.geojson"),
-            "wards": str(DATA_DIR / "wards.geojson"),
-        },
-    }
-
-
-def boundary_hierarchy() -> dict:
-    global _BOUNDARY_HIERARCHY_CACHE
-    if _BOUNDARY_HIERARCHY_CACHE is not None:
-        return _BOUNDARY_HIERARCHY_CACHE
-
-    with _BOUNDARY_HIERARCHY_LOCK:
-        if _BOUNDARY_HIERARCHY_CACHE is not None:
-            return _BOUNDARY_HIERARCHY_CACHE
-
-        county_features = counties()
-        subcounty_features = subcounties()
-        ward_features = wards()
-
-        county_by_name = {county_name(feature): feature for feature in county_features}
-        county_bounds = {name: bbox(feature) for name, feature in county_by_name.items()}
-        subcounty_rows = []
-        for feature in subcounty_features:
-            name = subcounty_name(feature)
-            parent_county = (feature.get("properties") or {}).get("ADM1_EN") or ""
-            subcounty_rows.append(
-                {
-                    "name": name,
-                    "code": subcounty_code(feature),
-                    "county": parent_county,
-                    "county_code": county_code(county_by_name[parent_county]) if parent_county in county_by_name else "",
-                    "feature": feature,
-                    "bbox": bbox(feature),
-                    "wards": [],
-                }
-            )
-
-        ward_rows = []
-        for feature in ward_features:
-            center = feature_center(feature)
-            parent = next(
-                (
-                    row
-                    for row in subcounty_rows
-                    if point_in_bbox(center, row["bbox"]) and point_in_feature(center, row["feature"])
-                ),
-                None,
-            )
-            if parent is None:
-                parent = best_parent_by_sampled_points(feature, subcounty_rows)
-            county = parent["county"] if parent else ""
-            if not county:
-                county = next(
-                    (
-                        name
-                        for name, bounds in county_bounds.items()
-                        if point_in_bbox(center, bounds) and point_in_feature(center, county_by_name[name])
-                    ),
-                    "",
-                )
-            row = {
-                "name": ward_name(feature),
-                "code": ward_code(feature),
-                "county": county,
-                "county_code": county_code(county_by_name[county]) if county in county_by_name else "",
-                "subcounty": parent["name"] if parent else "",
-                "subcounty_code": parent["code"] if parent else "",
-                "feature": feature,
-            }
-            ward_rows.append(row)
-            if parent:
-                parent["wards"].append(row)
-
-        _BOUNDARY_HIERARCHY_CACHE = {
-            "counties": [
-                {
-                    "name": county_name(feature),
-                    "code": county_code(feature),
-                    "feature": feature,
-                    "bbox": bbox(feature),
-                }
-                for feature in county_features
-            ],
-            "subcounties": subcounty_rows,
-            "wards": ward_rows,
-        }
-        return _BOUNDARY_HIERARCHY_CACHE
-
-
-def enriched_ward_feature(feature: dict) -> dict:
-    code = ward_code(feature)
-    row = next(
-        (ward for ward in boundary_hierarchy()["wards"] if ward["code"] == code and code),
-        None,
-    )
-    if row is None:
-        row = next(
-            (ward for ward in boundary_hierarchy()["wards"] if ward["feature"] is feature),
-            None,
-        )
-    if row is None:
-        return feature
-    return _with_properties(
-        feature,
-        {
-            "ADM1_EN": row["county"],
-            "ADM1_PCODE": f"KE{row['county_code']}" if row["county_code"] else "",
-            "ADM2_EN": row["subcounty"],
-            "ADM2_PCODE": row["subcounty_code"],
-            "ADM3_EN": row["name"],
-            "ADM3_PCODE": row["code"],
-        },
-    )
-
-
-def boundary_counties_collection() -> dict:
-    return _feature_collection(counties(), "counties")
-
-
-def boundary_subcounties_collection(county: str = "") -> dict:
-    features = subcounties()
-    if county:
-        county_feature = find_county(county)
-        if not county_feature:
-            return _feature_collection([], "subcounties")
-        parent_name = county_name(county_feature)
-        features = [
-            feature
-            for feature in features
-            if (feature.get("properties") or {}).get("ADM1_EN") == parent_name
-        ]
-    return _feature_collection(features, "subcounties")
-
-
-def boundary_wards_collection(county: str = "", subcounty: str = "") -> dict:
-    rows = boundary_hierarchy()["wards"]
-    if county:
-        county_feature = find_county(county)
-        if not county_feature:
-            return _feature_collection([], "wards")
-        parent_county = county_name(county_feature)
-        rows = [row for row in rows if row["county"] == parent_county]
-    if subcounty:
-        subcounty_feature = find_subcounty(subcounty)
-        if not subcounty_feature:
-            return _feature_collection([], "wards")
-        parent_subcounty = subcounty_name(subcounty_feature)
-        rows = [row for row in rows if row["subcounty"] == parent_subcounty]
-    return _feature_collection([enriched_ward_feature(row["feature"]) for row in rows], "wards")
-
-
 def overpass_query(segment_class: str, feature: dict, limit: int) -> str:
     profile = SEGMENT_CLASSES[segment_class]
     west, south, east, north = bbox(feature)
@@ -1591,7 +1365,7 @@ def request_overpass(query: str) -> dict:
         data=body,
         headers={
             "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
-            "User-Agent": "K-L-I-A/0.1 climate-water-land intelligence dashboard",
+            "User-Agent": "KenyaLiveAtlas/0.1 climate-water-land intelligence dashboard",
         },
         method="POST",
     )
@@ -1843,7 +1617,6 @@ def subcounty_analysis(feature: dict) -> dict:
     code = subcounty_code(feature)
     area_ha = estimate_area_ha(feature)
     properties = feature.get("properties", {})
-    ward_count = sum(1 for row in boundary_hierarchy()["wards"] if row["subcounty_code"] == code)
     return {
         "subcounty": name,
         "subcounty_code": code,
@@ -1855,7 +1628,14 @@ def subcounty_analysis(feature: dict) -> dict:
         "area_ha": area_ha,
         "data_mode": "source_required",
         "method": "Boundary metadata is loaded. Sub-county analytics require connected raster, weather, land-cover, and registry providers.",
-        "admin_units": {"wards": ward_count},
+        "admin_units": {
+            "wards": sum(
+                1
+                for ward in wards()
+                if ward.get("properties", {}).get("ADM2_PCODE") == code
+                or ward.get("properties", {}).get("ADM2_EN") == name
+            ),
+        },
         "indices": {"ndvi": None, "ndwi": None, "ndbi": None, "status": "source_required"},
         "crop_health": {"ndvi": None, "status": "source_required"},
         "soil_moisture": {"index": None, "status": "source_required"},
@@ -1870,7 +1650,6 @@ def subcounty_analysis(feature: dict) -> dict:
 
 
 def ward_analysis(feature: dict) -> dict:
-    feature = enriched_ward_feature(feature)
     name = ward_name(feature)
     code = ward_code(feature)
     area_ha = estimate_area_ha(feature)

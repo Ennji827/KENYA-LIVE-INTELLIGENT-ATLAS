@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import KsaPoweredBy from "../components/KsaPoweredBy";
 import SiteHeader from "../components/SiteHeader";
 import TopicCard from "../components/TopicCard";
+import { GoogleIcon } from "../components/AuthGateway";
 import { TOPICS } from "../data/topics";
 import { TOPIC_IMAGE } from "../data/topicImages";
 import "../styles/landing.css";
@@ -18,11 +19,11 @@ const SLIDES = TOPICS.filter((t) => TOPIC_IMAGE[t.id]).map((t) => ({
   topics: [t.id],
 }));
 
-const AUTO_MS = 6500;
+const AUTO_MS = 5000;
 const topicById = TOPICS.reduce((m, t) => ((m[t.id] = t), m), {});
 
 // Topics surfaced as quick links in the footer.
-const FOOTER_TOPICS = ["weather", "rainfall", "farmland", "forests", "roads", "households"];
+const FOOTER_TOPICS = ["weather", "landuse", "water_bodies", "roads", "households"];
 
 const ArrowRight = (props) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
@@ -33,10 +34,11 @@ const ArrowRight = (props) => (
 export default function LandingPage({
   onSignIn,
   onSignUp,
+  onGoogle,
   onExploreTopic,
+  onReports,
   authenticated = false,
   user = null,
-  onEnterHub,
   onSignOut,
 }) {
   const [active, setActive] = useState(0);
@@ -44,6 +46,12 @@ export default function LandingPage({
 
   const explore = onExploreTopic || onSignUp || (() => {});
   const scrollTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
+  // The topic grid below replaces the old separate hub page, so the CTAs that
+  // used to leave for it now bring the grid into view on this page.
+  const scrollToTopics = () =>
+    document
+      .getElementById("explore-topics")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   const go = useCallback((next) => {
     setActive((prev) => (next + SLIDES.length) % SLIDES.length);
@@ -64,29 +72,32 @@ export default function LandingPage({
   return (
     <div className="lp-root">
 
-      {/* â”€â”€ Nav (shared branded header) â”€â”€ */}
+      {/* ── Nav (shared branded header) ── */}
       <SiteHeader
         user={authenticated ? user : null}
         onHome={scrollTop}
-        onEnterHub={authenticated ? onEnterHub : undefined}
         onSignIn={authenticated ? undefined : onSignIn}
         onSignUp={authenticated ? undefined : onSignUp}
         onSignOut={authenticated ? onSignOut : undefined}
         active="home"
       />
 
-      {/* â”€â”€ Hero copy â”€â”€ */}
+      {/* ── Hero copy ── */}
       <section className="lp-hero">
         <div className="lp-hero-inner">
-          <div className="lp-badge">National Geospatial Intelligence</div>
+          <div className="lp-badge">National Geospatial and Resource Intelligence</div>
           <h1 className="lp-hero-title">
-            Kenya's National<br />
-            <span className="lp-hero-accent">Intelligence Platform</span>
+            Kenya Live <span className="lp-hero-accent">Atlas</span>
           </h1>
+          <p className="lp-hero-sub">
+            Climate, land, infrastructure and population — mapped from national
+            scale down to the ward, with reports and model-written analysis on
+            every view.
+          </p>
         </div>
       </section>
 
-      {/* â”€â”€ Hero slideshow â”€â”€ */}
+      {/* ── Hero slideshow ── */}
       <section className="lp-slideshow" onMouseEnter={pause} onMouseLeave={resume}>
         <div className="lp-slides" aria-roledescription="carousel">
           {SLIDES.map((slide, i) => (
@@ -147,13 +158,13 @@ export default function LandingPage({
         </div>
       </section>
 
-      {/* â”€â”€ Explore topics â”€â”€ */}
-      <section className="lp-topics">
+      {/* ── Explore topics ── */}
+      <section className="lp-topics" id="explore-topics">
         <div className="lp-section-inner">
-          <h2 className="lp-section-title">Explore the intelligence topics</h2>
+          <h2 className="lp-section-title">Explore Resource intelligence topics</h2>
           <p className="lp-section-sub">
-            Eight critical topics, each mapped from national down to sub-county level.
-            Pick one to drill in, generate reports, and ask the model for insights.
+            Critical topics, each mapped from national down to sub-county level.
+            Select a topic and generate reports, and ask the model for insights.
           </p>
           <div className="lp-topics-grid">
             {TOPICS.map((topic) => (
@@ -167,44 +178,46 @@ export default function LandingPage({
         </div>
       </section>
 
-      {/* â”€â”€ CTA banner â”€â”€ */}
+      {/* ── CTA banner ── */}
       <section className="lp-cta-band">
         <div className="lp-section-inner lp-cta-band-inner">
           <div>
             <h2 className="lp-cta-band-title">Ready to explore Kenya's national data?</h2>
             <p className="lp-cta-band-sub">
               {authenticated
-                ? "Jump into the intelligence hub and drill down from national to sub-county level."
-                : "Join researchers, analysts, and decision makers using K-L-I-A."}
+                ? "Open your intelligence reports, or pick a topic below to drill down from national to sub-county level."
+                : "Join researchers, analysts, and decision makers using Kenya Live Atlas."}
             </p>
           </div>
           <div className="lp-cta-band-actions">
             {authenticated ? (
-              <button type="button" className="lp-cta-primary" onClick={onEnterHub}>Enter the hub</button>
+              <button type="button" className="lp-cta-primary" onClick={onReports}>View Reports</button>
             ) : (
               <>
                 <button type="button" className="lp-cta-primary" onClick={onSignUp}>Create free account</button>
                 <button type="button" className="lp-cta-ghost lp-cta-ghost-light" onClick={onSignIn}>Sign in</button>
+                {onGoogle && (
+                  <button type="button" className="lp-cta-google" onClick={onGoogle}>
+                    <GoogleIcon />
+                    <span>Continue with Google</span>
+                  </button>
+                )}
               </>
             )}
           </div>
         </div>
       </section>
 
-      {/* â”€â”€ Footer â”€â”€ */}
+      {/* ── Footer ── */}
       <footer className="lp-footer">
         <div className="lp-section-inner lp-footer-grid">
           <div className="lp-footer-brand">
             <div className="lp-logo">
-              <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-                <rect width="32" height="32" fill="#0f4c81" />
-                <path d="M8 22 L16 10 L24 22" stroke="#4ade80" strokeWidth="2.5" strokeLinejoin="round" fill="none" />
-                <circle cx="16" cy="10" r="2" fill="#4ade80" />
-              </svg>
-              <span className="lp-logo-name">K-L-I-A</span>
+              <span className="brand-abbr" aria-hidden="true">KLA</span>
+              <span className="lp-logo-name">KENYA LIVE ATLAS</span>
             </div>
             <p className="lp-footer-copy">
-              National geospatial intelligence for Kenya â€” climate, environment,
+              National geospatial intelligence for Kenya — climate, environment,
               infrastructure, and population mapped to every county.
             </p>
           </div>
@@ -222,7 +235,7 @@ export default function LandingPage({
             <h4>Platform</h4>
             {authenticated ? (
               <>
-                <button type="button" className="lp-footer-link" onClick={onEnterHub}>Open the hub</button>
+                <button type="button" className="lp-footer-link" onClick={scrollToTopics}>Browse topics</button>
                 <button type="button" className="lp-footer-link" onClick={onSignOut}>Sign out</button>
               </>
             ) : (
@@ -241,7 +254,7 @@ export default function LandingPage({
 
         <div className="lp-footer-bottom">
           <div className="lp-section-inner lp-footer-bottom-inner">
-            <span>Â© {new Date().getFullYear()} K-L-I-A Â· Resource and Ecosystem Intelligence System for Kenya</span>
+            <span>© {new Date().getFullYear()} Kenya Live Atlas · National Geospatial and Resource Intelligence for Kenya</span>
             <span>Kenya Space Agency</span>
           </div>
         </div>

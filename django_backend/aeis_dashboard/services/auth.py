@@ -7,6 +7,7 @@ from datetime import timedelta
 from django.db.models import Q
 from django.utils import timezone
 
+from aeis_django.env import env
 from aeis_dashboard.models import AEISUser, AccessSession, AuthAudit, SystemSetting
 
 from . import domain
@@ -92,37 +93,40 @@ def _make_username(email: str) -> str:
 
 
 def county_email(name: str) -> str:
-    return f"{slugify(name)}@county.k-l-i-a.local"
+    return f"{slugify(name)}@county.aeis-k.local"
 
 
 def seed_default_accounts() -> dict:
+    county_count = AEISUser.objects.filter(role=AEISUser.Role.COUNTY).count()
+    national_count = AEISUser.objects.filter(
+        role__in=[AEISUser.Role.MINISTRY, AEISUser.Role.ANALYST, AEISUser.Role.AUDITOR]
+    ).count()
+    if county_count >= 47 and national_count >= 3:
+        SystemSetting.objects.get_or_create(
+            key="public_access_locked",
+            defaults={"value": "1" if domain.public_access_mode() else "0"},
+        )
+        return {"created": 0, "total": county_count + national_count}
+
     created = 0
     for feature in domain.counties():
         name = domain.county_name(feature)
         code = domain.county_code(feature)
-        defaults = {
-            "email": county_email(name),
-            "county_code": code,
-            "county_name": name,
-            "role": AEISUser.Role.COUNTY,
-            "provider": "password",
-            "is_active": True,
-        }
         user, was_created = AEISUser.objects.get_or_create(
             username=f"{slugify(name)}_county",
-            defaults=defaults,
+            defaults={
+                "email": county_email(name),
+                "county_code": code,
+                "county_name": name,
+                "role": AEISUser.Role.COUNTY,
+                "provider": "password",
+                "is_active": True,
+            },
         )
-        changed = False
-        for field, value in defaults.items():
-            if getattr(user, field) != value:
-                setattr(user, field, value)
-                changed = True
         if was_created:
             user.set_password(domain.DEFAULT_COUNTY_PASSWORD)
+            user.save(update_fields=["password"])
             created += 1
-            changed = True
-        if changed:
-            user.save()
 
     for profile in domain.NATIONAL_AUTH_ACCOUNTS:
         user, was_created = AEISUser.objects.get_or_create(
@@ -178,7 +182,7 @@ def session_payload(session: AccessSession) -> dict:
             "username": user.username,
             "email": user.email,
             "provider": session.provider,
-            "command_center": "K-L-I-A Public Portal",
+            "command_center": "Kenya Live Atlas Public Portal",
             "gps_status": "not_required",
             "boundary_scope": "public_read",
             "permissions": ROLE_PERMISSIONS.get(user.role, []),
@@ -207,7 +211,7 @@ def session_payload(session: AccessSession) -> dict:
     demo = session.provider == "password_demo"
     if user.role == AEISUser.Role.AUDITOR:
         boundary_scope = "national_read_only"
-        command_center = "K-L-I-A National Audit Workspace"
+        command_center = "Kenya Live Atlas National Audit Workspace"
         gps_status = "not_required"
     elif user.role == AEISUser.Role.FARMER:
         boundary_scope = "own_field_site_only"
@@ -268,136 +272,6 @@ def _create_session(user: AEISUser, provider: str, latitude: float, longitude: f
         longitude=longitude,
         expires_at=timezone.now() + timedelta(seconds=domain.SESSION_SECONDS),
     )
-
-
-def authenticate_national_login(payload: dict) -> tuple[int, dict]:
-    seed_default_accounts()
-    identifier = str(payload.get("email") or payload.get("username") or "").strip()
-    password = str(payload.get("password") or "")
-    if not identifier or not password:
-        return 400, {"error": "national email or username and password are required"}
-
-    user = _find_user(identifier, [AEISUser.Role.MINISTRY, AEISUser.Role.ANALYST, AEISUser.Role.AUDITOR])
-    if not user or not user.check_password(password):
-        _audit(
-            "login",
-            "failed",
-            payload,
-            county_code="000",
-            county_name="National",
-            email=identifier if "@" in identifier else "",
-            username="" if "@" in identifier else identifier,
-            role="national",
-            provider="password",
-            reason="invalid_national_credentials",
-        )
-        return 401, {"error": "Invalid national access credentials"}
-
-    profile = _profile(user)
-    if not profile:
-        return 403, {"error": "National access profile is not configured"}
-    session = _create_session(user, user.provider, 0, 0)
-    _audit(
-        "login",
-        "success",
-        payload,
-        county_code=user.county_code,
-        county_name=user.county_name,
-        username=user.username,
-        email=user.email,
-        role=user.role,
-        provider=user.provider,
-        latitude=0,
-        longitude=0,
-    )
-    return 200, session_payload(session)
-
-
-def authenticate_county_login(payload: dict) -> tuple[int, dict]:
-    seed_default_accounts()
-    county_identifier = str(payload.get("county_code") or payload.get("county") or "").strip()
-    identifier = str(payload.get("email") or payload.get("username") or "").strip()
-    password = str(payload.get("password") or "")
-    demo = bool(payload.get("demo_remote_access"))
-    latitude, longitude = payload.get("latitude"), payload.get("longitude")
-
-    if not county_identifier or not identifier or not password:
-        return 400, {"error": "county_code, email, and password are required"}
-    if demo and not domain.remote_county_demo_enabled():
-        return 403, {"error": "Remote county access is locked. Use browser GPS or unlock public presentation mode from the Ministry panel."}
-    if not demo and (latitude is None or longitude is None):
-        return 400, {"error": "GPS latitude and longitude are required"}
-    try:
-        lat = float(latitude) if latitude is not None else 0.0
-        lon = float(longitude) if longitude is not None else 0.0
-    except (TypeError, ValueError):
-        return 400, {"error": "GPS latitude and longitude must be numbers"}
-
-    feature = domain.find_county(county_identifier)
-    if not feature:
-        return 404, {"error": "County not found"}
-    code, name = domain.county_code(feature), domain.county_name(feature)
-    if not demo and not domain.point_in_feature((lon, lat), feature):
-        _audit(
-            "login",
-            "failed",
-            payload,
-            county_code=code,
-            county_name=name,
-            email=identifier if "@" in identifier else "",
-            username="" if "@" in identifier else identifier,
-            role="county",
-            provider="password",
-            latitude=lat,
-            longitude=lon,
-            reason="outside_county_geofence",
-        )
-        return 403, {
-            "error": "GPS check failed. Login is allowed only from inside the county boundary.",
-            "gps_status": "outside_county",
-            "county": name,
-            "county_code": code,
-        }
-
-    user = _find_user(
-        identifier,
-        [AEISUser.Role.COUNTY, AEISUser.Role.FIELD_OFFICER, AEISUser.Role.FARMER],
-        code,
-    )
-    if not user or not user.check_password(password):
-        _audit(
-            "login",
-            "failed",
-            payload,
-            county_code=code,
-            county_name=name,
-            email=identifier if "@" in identifier else "",
-            username="" if "@" in identifier else identifier,
-            role="county",
-            provider="password",
-            latitude=lat,
-            longitude=lon,
-            reason="invalid_credentials",
-        )
-        return 401, {"error": "Invalid county credentials"}
-
-    provider = "password_demo" if demo else user.provider
-    session = _create_session(user, provider, lat, lon)
-    _audit(
-        "login",
-        "success",
-        payload,
-        county_code=code,
-        county_name=name,
-        username=user.username,
-        email=user.email,
-        role=user.role,
-        provider=provider,
-        latitude=lat,
-        longitude=lon,
-        reason="demo_remote_access" if demo else "",
-    )
-    return 200, session_payload(session)
 
 
 def validate_session(payload: dict) -> tuple[int, dict]:
@@ -520,7 +394,7 @@ def national_login_accounts() -> list[dict]:
                 "role": user.role,
                 "provider": user.provider,
                 "is_active": user.is_active,
-                "command_center": profile.get("command_center", "K-L-I-A National Access"),
+                "command_center": profile.get("command_center", "Kenya Live Atlas National Access"),
                 "boundary_scope": profile.get("boundary_scope", "national"),
                 "permissions": profile.get("permissions", []),
                 "created_at": user.date_joined.isoformat(),
@@ -611,19 +485,39 @@ def authenticate_public_login(payload: dict) -> tuple[int, dict]:
 
 def authenticate_google_login(payload: dict) -> tuple[int, dict]:
     import json as _json
+    import os
     import urllib.error
     import urllib.request
 
     id_token = str(payload.get("id_token") or "").strip()
+    access_token = str(payload.get("access_token") or "").strip()
     position = str(payload.get("position") or "").strip()
 
-    if not id_token:
-        return 400, {"error": "Google id_token is required"}
+    if not id_token and not access_token:
+        return 400, {"error": "Google access_token or id_token is required"}
 
     try:
-        url = f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}"
-        with urllib.request.urlopen(url, timeout=8) as resp:
-            google_data = _json.loads(resp.read())
+        if access_token:
+            # OAuth token flow: resolve the verified profile from the access token.
+            profile_req = urllib.request.Request(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            with urllib.request.urlopen(profile_req, timeout=8) as resp:
+                google_data = _json.loads(resp.read())
+            # Guard against token substitution: when the backend knows the app's
+            # client id, require the token to have been issued for it.
+            expected_aud = env("KLA_GOOGLE_CLIENT_ID", "").strip()
+            if expected_aud:
+                info_url = f"https://oauth2.googleapis.com/tokeninfo?access_token={access_token}"
+                with urllib.request.urlopen(info_url, timeout=8) as resp:
+                    token_meta = _json.loads(resp.read())
+                if expected_aud not in {token_meta.get("aud"), token_meta.get("azp")}:
+                    return 401, {"error": "Google token was issued for a different application"}
+        else:
+            url = f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}"
+            with urllib.request.urlopen(url, timeout=8) as resp:
+                google_data = _json.loads(resp.read())
     except urllib.error.HTTPError as exc:
         try:
             body = _json.loads(exc.read())

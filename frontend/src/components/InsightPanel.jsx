@@ -1,26 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { postIntelligenceQuery, fetchIntelligenceStatus } from "../utils/apiClient";
-import { localInsights, scopeLabel } from "../utils/intel";
-import { getTopic } from "../data/topics";
+import { fetchIntelligenceStatus } from "../utils/apiClient";
+import { scopeLabel } from "../utils/intel";
+import { getTopic, suggestedQuestions } from "../data/topics";
 
-// Suggested prompts adapt to the topic so the box is never a blank page.
-function suggestions(topic) {
-  return [
-    `Which regions have the highest ${topic.label.toLowerCase()}?`,
-    `Where is ${topic.label.toLowerCase()} lowest?`,
-    `What is the average and how wide is the gap?`,
-  ];
-}
-
-// AI insights panel. Analyses the current workspace (topic + scope + visible
-// regions) and returns insights with reasons. Tries the backend intelligence
-// endpoint first; on any failure falls back to the local analyser.
-export default function InsightPanel({ topicId, scope, regions, dataStatus = "scaffolded" }) {
+// Ask-the-model launcher. It only composes the question — asking hands off to
+// the insights page, which runs the analysis and owns the answer. Keeping the
+// answer off this card stops a long response from expanding the workspace
+// under the chart.
+export default function InsightPanel({ topicId, scope, onAsk }) {
   const topic = getTopic(topicId);
   const [question, setQuestion] = useState("");
-  const [insights, setInsights] = useState(null);
-  const [source, setSource] = useState(null); // "model" | "local"
-  const [loading, setLoading] = useState(false);
   // Live provider state from /api/intelligence/status (null until known/failed).
   const [provider, setProvider] = useState(null);
 
@@ -40,145 +29,72 @@ export default function InsightPanel({ topicId, scope, regions, dataStatus = "sc
     };
   }, []);
 
-  async function analyze(q) {
+  const ask = (q) => {
     const query = (q ?? question).trim();
-    setLoading(true);
-    setInsights(null);
-
-    // Everything the backend needs to resolve scope and ground the analysis in
-    // exactly what is on screen: the topic (with unit/metric + source status)
-    // and the per-region values, plus the raw scope names for drill-down.
-    const workspace = {
-      topic: topic.label,
-      topic_id: topicId,
-      unit: topic.unit,
-      metric: topic.metricLabel,
-      source_status: dataStatus,
-      scope: scopeLabel(scope),
-      level: scope.level,
-      county: scope.county || "",
-      subcounty: scope.subcounty || "",
-      ward: scope.ward || "",
-      regions: regions.map((r) => ({ name: r.name, value: r.value })),
-    };
-
-    try {
-      // Now sent with the session bearer token via apiClient, so the backend
-      // model path is actually reachable (previously always 403'd → local).
-      const payload = await postIntelligenceQuery({ question: query, workspace });
-      const modelInsights = normalizeModelResponse(payload);
-      if (modelInsights.length) {
-        setInsights(modelInsights);
-        setSource("model");
-        setLoading(false);
-        return;
-      }
-    } catch {
-      // Fall through to local analysis (backend offline or role not permitted).
-    }
-
-    setInsights(localInsights(topicId, scope, regions, query));
-    setSource("local");
-    setLoading(false);
-  }
+    if (query) onAsk(query);
+  };
 
   return (
-    <div className="insight-panel">
-      <div className="insight-panel__head">
-        <h3>Ask the model</h3>
-        <p>
-          The model analyses your current workspace —{" "}
-          <strong>{topic.label}</strong> at <strong>{scopeLabel(scope)}</strong>{" "}
-          — and explains its reasoning.
-        </p>
+    <div className="composer composer--inline">
+      <div className="composer__head">
+        <h3 className="composer__title">Ask the model</h3>
         {provider && (
-          <div className="insight-panel__provider">
-            <span className="dot" />
-            {provider.openai_configured
-              ? `Intelligence model online · ${provider.openai_model}`
-              : "Local rule-based engine (hosted model not configured)"}
-          </div>
+          <span
+            className={`feed-pill feed-pill--${provider.openai_configured ? "live" : "idle"}`}
+            title={
+              provider.openai_configured
+                ? `Hosted model: ${provider.openai_model}`
+                : "Hosted model not configured — answers come from the local rule-based engine"
+            }
+          >
+            <span className="status-dot" aria-hidden="true" />
+            {provider.openai_configured ? "Model online" : "Local engine"}
+          </span>
         )}
       </div>
 
+      <p className="composer__sub">
+        Analyses <strong>{topic.label}</strong> at{" "}
+        <strong>{scopeLabel(scope)}</strong> and explains its reasoning.
+      </p>
+
       <form
-        className="insight-panel__form"
+        className="composer__form"
         onSubmit={(e) => {
           e.preventDefault();
-          analyze();
+          ask();
         }}
       >
         <textarea
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder={`e.g. ${suggestions(topic)[0]}`}
+          placeholder={`e.g. ${suggestedQuestions(topic)[0]}`}
           rows={2}
+          aria-label="Your question"
         />
-        <button type="submit" disabled={loading}>
-          {loading ? "Analysing…" : "Get insights"}
+        <button type="submit" className="btn" disabled={!question.trim()}>
+          Get insights
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
         </button>
       </form>
 
-      <div className="insight-panel__suggestions">
-        {suggestions(topic).map((s) => (
+      <div className="chip-row">
+        {suggestedQuestions(topic).map((s) => (
           <button
             key={s}
             type="button"
             className="chip"
             onClick={() => {
               setQuestion(s);
-              analyze(s);
+              ask(s);
             }}
           >
             {s}
           </button>
         ))}
       </div>
-
-      {insights && (
-        <div className="insight-panel__results">
-          <div className="insight-panel__source">
-            {source === "model"
-              ? "Answered by the intelligence model"
-              : "Answered by the local analysis engine (model offline)"}
-          </div>
-          <ol>
-            {insights.map((item, i) => (
-              <li key={i}>
-                <div className="insight-text">{item.text}</div>
-                {item.reason && (
-                  <div className="insight-reason">
-                    <span>Why:</span> {item.reason}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
     </div>
   );
-}
-
-// Accept a few plausible backend shapes and reduce them to {text, reason}[].
-function normalizeModelResponse(payload) {
-  if (!payload) return [];
-  if (Array.isArray(payload.insights)) {
-    return payload.insights
-      .map((i) =>
-        typeof i === "string"
-          ? { text: i, reason: "" }
-          : { text: i.text || i.insight || "", reason: i.reason || i.explanation || "" },
-      )
-      .filter((i) => i.text);
-  }
-  if (payload.answer || payload.explanation) {
-    return [
-      {
-        text: payload.answer || payload.summary || "",
-        reason: payload.explanation || payload.reason || "",
-      },
-    ].filter((i) => i.text);
-  }
-  return [];
 }

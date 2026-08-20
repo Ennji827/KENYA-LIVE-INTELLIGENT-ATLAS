@@ -3,3 +3,7 @@ waitress>=3.0.2,<4.0
 openpyxl>=3.1.5,<4.0
 reportlab>=4.4.0,<5.0
 psycopg[binary]>=3.2.0,<4.0
+# Google Earth Engine live zonal stats + raster tiles (forests / farmland /
+# water_bodies / rainfall / weather). Optional at runtime: topics fall back to
+# scaffolding when no service-account credentials are configured.
+earthengine-api>=1.7,<2.0
