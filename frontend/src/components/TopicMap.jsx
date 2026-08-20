@@ -478,15 +478,20 @@ export default function TopicMap({
     return [Math.min(...values), Math.max(...values)];
   }, [geojson, topicId, nameKey, liveValues]);
 
+  // Boundaries only: the ramp colours the *stroke*, and the fill is kept at
+  // zero opacity so the imagery underneath is never washed over. The fill is
+  // still painted (fillOpacity: 0, not fill: false) — Leaflet hit-tests the
+  // interior of a path only while it has a fill, and dropping it would leave
+  // the hairline stroke as the sole target for drill-down and tooltips.
   const styleFeature = (feature) => {
     const name = feature.properties?.[nameKey];
     const value = valueFor(name);
     const isSelected = selectedRegion && name === selectedRegion;
     return {
-      fillColor: rampColor(topicId, value, min, max),
-      weight: isSelected ? 3 : 1,
-      color: isSelected ? "#0f172a" : "#e2e8f0",
-      fillOpacity: 0.6,
+      color: rampColor(topicId, value, min, max),
+      weight: isSelected ? 3.5 : 1.6,
+      opacity: 1,
+      fillOpacity: 0,
       dashArray: isSelected ? "" : "0",
     };
   };
@@ -511,7 +516,13 @@ export default function TopicMap({
     );
     layer.on({
       click: () => onDrill && onDrill(name),
-      mouseover: (e) => e.target.setStyle({ weight: 3, color: "#0f172a" }),
+      // Weight only, and lifted above its neighbours: the stroke now carries
+      // the value, so recolouring it on hover would erase the reading. A
+      // thicker line is the whole affordance once there is no fill to tint.
+      mouseover: (e) => {
+        e.target.setStyle({ weight: 3.5 });
+        e.target.bringToFront();
+      },
       mouseout: (e) => e.target.setStyle(styleFeature(feature)),
     });
   };

@@ -1173,11 +1173,48 @@ body {
 }
 
 /* ── Workspace grid ──────────────────────────────────────────── */
+/* stretch, not start: the map and the chart are one pair and read as
+   mismatched at different heights. Left to itself the chart card is sized by
+   a fixed plot height plus the docked ask-the-model footer, which lands well
+   clear of the map's height in one direction or the other. */
 .workspace__grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--s-4);
-  align-items: start;
+  align-items: stretch;
+}
+
+/* Both cards are columns so their bodies, not their chrome, absorb the
+   difference: the head (and the scope rail) keep their natural height and
+   the map and the plot take the rest. */
+.panel--map,
+.panel--chart {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel--map .panel__head,
+.panel--map .scope-nav,
+.panel--chart .panel__head,
+.panel--chart .panel__footer {
+  flex: none;
+}
+
+/* Grows into a taller row, but keeps its own height as the flex basis — so
+   the map still states how tall the pair wants to be. */
+.panel--map .map-shell {
+  flex: 1 1 auto;
+}
+
+/* The plot has no height of its own here: it takes what the head and footer
+   leave. ResponsiveContainer still measures a definite box, it just comes
+   from the flex line rather than a rem value. The floor keeps the plot
+   readable, and being a min rather than a height it never inflates the row. */
+.panel--chart .chart {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 9rem;
 }
 
 /* ── Map ─────────────────────────────────────────────────────── */
@@ -2382,6 +2419,16 @@ body {
   .reports,
   .insights {
     max-width: 46rem;
+  }
+}
+
+/* ── Stacked map + chart ≤ 1023px ────────────────────────────────
+   One column, so the two cards are in separate rows and stretching them
+   equalises nothing on its own — each row is still sized by its own card.
+   Equal rows give both the height of the taller one, which is the map. */
+@media (max-width: 1023px) {
+  .workspace__grid {
+    grid-auto-rows: 1fr;
   }
 }
 

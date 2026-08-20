@@ -34,11 +34,14 @@ import threading
 
 from django.core.cache import cache
 
-from aeis_django.settings import PROJECT_ROOT
+from aeis_django.settings import BASE_DIR
 
 from . import domain
 
-FACILITY_ROOT = PROJECT_ROOT / "django_backend"
+# BASE_DIR is the backend package root, so this survives the repository or the
+# backend directory being renamed — which walking up to PROJECT_ROOT and back
+# down by hard-coded name did not.
+FACILITY_ROOT = BASE_DIR / "data" / "facilities"
 
 # Kenya's bounding box, generously padded. The school layer contains two points
 # digitised at Indian Ocean longitudes (61.0 and 73.8); everything else falls
@@ -50,7 +53,7 @@ KENYA_BBOX = (33.5, 42.2, -5.2, 5.8)  # lon_min, lon_max, lat_min, lat_max
 # holding the facility type, used for the per-type breakdown in the response.
 FACILITY_CONFIG: dict[str, dict] = {
     "hospitals": {
-        "path": FACILITY_ROOT / "hospitals" / "facilities_mapped_health.gpkg",
+        "path": FACILITY_ROOT / "facilities_mapped_health.gpkg",
         "layer": "facilities_mapped_health",
         "category": "Category",
         "name_column": "FacilityNa",
@@ -59,7 +62,7 @@ FACILITY_CONFIG: dict[str, dict] = {
         "label": "Hospitals & clinics",
     },
     "schools": {
-        "path": FACILITY_ROOT / "schools" / "facilities_mapped_school.gpkg",
+        "path": FACILITY_ROOT / "facilities_mapped_school.gpkg",
         "layer": "facilities_mapped_school",
         "category": "Institutio",
         "name_column": "SchoolName",
@@ -68,7 +71,7 @@ FACILITY_CONFIG: dict[str, dict] = {
         "label": "Schools",
     },
     "police_posts": {
-        "path": FACILITY_ROOT / "police stations" / "facilities_mapped_police.gpkg",
+        "path": FACILITY_ROOT / "facilities_mapped_police.gpkg",
         "layer": "facilities_mapped_police",
         "category": "Category",
         "name_column": "FacilityNa",
@@ -77,7 +80,7 @@ FACILITY_CONFIG: dict[str, dict] = {
         "label": "Police stations",
     },
     "admin_offices": {
-        "path": FACILITY_ROOT / "Administration offices" / "facilities_mapped_ngao.gpkg",
+        "path": FACILITY_ROOT / "facilities_mapped_ngao.gpkg",
         "layer": "facilities_mapped_ngao",
         "category": "Category",
         "name_column": "FacilityNa",
